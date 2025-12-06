@@ -16,12 +16,35 @@ router.post('/', async (req, res) => {
     }
 });
 
-// 2. GET ALL EQUIPMENT (GET)
-// URL: http://localhost:5000/api/equipment
+
 router.get('/', async (req, res) => {
     try {
         const allEquipment = await Equipment.find();
         res.status(200).json(allEquipment);
+    } catch (err) {
+        res.status(500).json(err);
+    }
+});
+
+
+router.put('/:id', async (req, res) => {
+    try {
+        const updatedEquipment = await Equipment.findByIdAndUpdate(
+            req.params.id, 
+            { $set: req.body }, 
+            { new: true }       
+        );
+        res.status(200).json(updatedEquipment);
+    } catch (err) {
+        res.status(500).json(err);
+    }
+});
+
+
+router.delete('/:id', async (req, res) => {
+    try {
+        await Equipment.findByIdAndDelete(req.params.id);
+        res.status(200).json("Equipment has been deleted...");
     } catch (err) {
         res.status(500).json(err);
     }
