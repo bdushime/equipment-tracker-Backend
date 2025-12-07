@@ -1,12 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
-
+const jwt = require('jsonwebtoken'); 
 
 
 router.post('/register', async (req, res) => {
     try {
-      
+        
         const checkCriteria = [
             { email: req.body.email }, 
             { username: req.body.username }
@@ -39,34 +39,34 @@ router.post('/register', async (req, res) => {
 
 router.post('/login', async (req, res) => {
     try {
-       
         const user = await User.findOne({ email: req.body.email });
         if (!user) {
             return res.status(404).json({ message: "User not found!" });
         }
 
-        
         if (user.password !== req.body.password) {
             return res.status(400).json({ message: "Wrong password!" });
         }
 
+   
         user.lastLogin = new Date();
         await user.save();
 
+        const token = jwt.sign(
+            { id: user._id, role: user.role }, 
+            process.env.JWT_SECRET || "mySuperSecretKey123", 
+            { expiresIn: "5d" } 
+        );
+
         const { password, ...others } = user._doc;
         
-        res.status(200).json({ 
-            message: "Login Successful", 
-            user: others 
-        });
+       
+        res.status(200).json({ ...others, token });
 
     } catch (err) {
+        console.error(err);
         res.status(500).json(err);
     }
 });
-
-
-
-
 
 module.exports = router;
