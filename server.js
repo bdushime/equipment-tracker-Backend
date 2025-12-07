@@ -7,6 +7,7 @@ const cors = require('cors');
 const equipmentRoute = require('./routes/equipment');
 const authRoute = require('./routes/auth');
 const userRoute = require('./routes/users');
+const transactionRoute = require('./routes/transactions');
 
 
 const app = express();
@@ -18,6 +19,8 @@ app.use(cors());
 app.use('/api/equipment', equipmentRoute);
 app.use('/api/auth', authRoute);
 app.use('/api/users', userRoute);
+app.use('/api/transactions', transactionRoute);
+
 
 
 const connectDB = async () => {
