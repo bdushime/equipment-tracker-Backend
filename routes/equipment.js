@@ -5,7 +5,7 @@ const { verifyToken } = require('../middleware/verifyToken');
 const { checkRole } = require('../middleware/checkRole');
 
 
-router.post('/', async (req, res) => {
+router.post('/', verifyToken, checkRole(['IT', 'Admin']), async (req, res) => {
     try {
         
         const newEquipment = new Equipment(req.body);
@@ -43,7 +43,7 @@ router.put('/:id', async (req, res) => {
 });
 
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', verifyToken, checkRole(['Admin']), async (req, res) => {
     try {
         await Equipment.findByIdAndDelete(req.params.id);
         res.status(200).json("Equipment has been deleted...");
