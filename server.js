@@ -20,6 +20,7 @@ app.use('/api/equipment', equipmentRoute);
 app.use('/api/auth', authRoute);
 app.use('/api/users', userRoute);
 app.use('/api/transactions', transactionRoute);
+app.use('/api/gate', require('./routes/gate'));
 
 
 
