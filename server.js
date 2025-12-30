@@ -8,6 +8,7 @@ const equipmentRoute = require('./routes/equipment');
 const authRoute = require('./routes/auth');
 const userRoute = require('./routes/users');
 const transactionRoute = require('./routes/transactions');
+const startOverdueCheck = require('./utils/overdueCheck');
 
 
 const app = express();
@@ -38,6 +39,9 @@ const connectDB = async () => {
 app.get('/', (req, res) => {
     res.send('Equipment Tracker API is running...');
 });
+
+
+startOverdueCheck();
 
 
 const PORT = process.env.PORT || 5001;
