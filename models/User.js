@@ -23,7 +23,6 @@ const UserSchema = new mongoose.Schema({
     },
     studentId: {
         type: String,
-        
     },
     fullName: { type: String },
     phone: { type: String },
@@ -36,17 +35,20 @@ const UserSchema = new mongoose.Schema({
     }
 }, { timestamps: true });
 
+// --- THE FIX IS HERE ---
+// Notice: We removed 'next' from the function arguments: async function()
+UserSchema.pre('save', async function() { 
 
-UserSchema.pre('save', async function(next) {
-
+    // If password is not modified, we just return (exit the function)
     if (!this.isModified('password')) {
-        return next();
+        return; 
     }
 
+    // Generate salt and hash
     const salt = await bcrypt.genSalt(10);
-   
     this.password = await bcrypt.hash(this.password, salt);
-    next();
+    
+    
 });
 
 module.exports = mongoose.model('User', UserSchema);
