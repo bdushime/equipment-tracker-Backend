@@ -1,13 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
-const verifyToken = require('../middleware/authMiddleware'); 
+const { verifyToken } = require('../middleware/verifyToken'); 
 
 // GET /api/users/profile
-// Description: Get the current logged-in user's details (Score, Role, Name)
 router.get('/profile', verifyToken, async (req, res) => {
     try {
-        // req.user.id comes from the verifyToken middleware
+        // req.user.id comes from the verifyToken middlewar
         const user = await User.findById(req.user.id);
         
         if (!user) {
@@ -22,7 +21,7 @@ router.get('/profile', verifyToken, async (req, res) => {
     }
 });
 
-// --- EXISTING ROUTES (BELOW) ---
+// --- EXISTING ROUTES (Keep these below) ---
 
 router.put('/:id', async (req, res) => {
     try {
@@ -46,7 +45,6 @@ router.delete('/:id', async (req, res) => {
     }
 });
 
-// GET User by ID (Admin usage mainly)
 router.get('/:id', async (req, res) => {
     try {
         const user = await User.findById(req.params.id);

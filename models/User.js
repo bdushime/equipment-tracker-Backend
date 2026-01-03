@@ -1,58 +1,54 @@
-const express = require('express');
-const router = express.Router();
-const User = require('../models/User');
-const { verifyToken } = require('../middleware/verifyToken'); 
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs'); 
 
-// GET /api/users/profile
-router.get('/profile', verifyToken, async (req, res) => {
-    try {
-        // req.user.id comes from the verifyToken middleware
-        const user = await User.findById(req.user.id);
-        
-        if (!user) {
-            return res.status(404).json({ message: "User not found" });
-        }
-
-        // Remove password before sending
-        const { password, ...others } = user._doc;
-        res.status(200).json(others);
-    } catch (err) {
-        res.status(500).json(err);
+const UserSchema = new mongoose.Schema({
+    username: {
+        type: String,
+        required: true,
+        unique: true
+    },
+    email: {
+        type: String,
+        required: true,
+        unique: true
+    },
+    password: {
+        type: String,
+        required: true
+    },
+    role: {
+        type: String,
+        enum: ['Student', 'Admin', 'Security', 'IT_Staff'],
+        default: 'Student'
+    },
+    studentId: {
+        type: String,
+    },
+    fullName: { type: String },
+    phone: { type: String },
+    responsibilityScore: {
+        type: Number,
+        default: 100
+    },
+    lastLogin: {
+        type: Date
     }
+}, { timestamps: true });
+
+// --- THE FIX IS HERE ---
+// Notice: We removed 'next' from the function arguments: async function()
+UserSchema.pre('save', async function() { 
+
+    // If password is not modified, we just return (exit the function)
+    if (!this.isModified('password')) {
+        return; 
+    }
+
+    // Generate saalt and hash
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    
+    
 });
 
-// --- EXISTING ROUTES (Keep these below) ---
-
-router.put('/:id', async (req, res) => {
-    try {
-        const updatedUser = await User.findByIdAndUpdate(
-            req.params.id,
-            { $set: req.body },
-            { new: true }
-        );
-        res.status(200).json(updatedUser);
-    } catch (err) {
-        res.status(500).json(err);
-    }
-});
-
-router.delete('/:id', async (req, res) => {
-    try {
-        await User.findByIdAndDelete(req.params.id);
-        res.status(200).json("User has been deleted...");
-    } catch (err) {
-        res.status(500).json(err);
-    }
-});
-
-router.get('/:id', async (req, res) => {
-    try {
-        const user = await User.findById(req.params.id);
-        const { password, ...others } = user._doc;
-        res.status(200).json(others);
-    } catch (err) {
-        res.status(500).json(err);
-    }
-});
-
-module.exports = router;
+module.exports = mongoose.model('User', UserSchema);
