@@ -52,4 +52,18 @@ router.delete('/:id', verifyToken, checkRole(['Admin']), async (req, res) => {
     }
 });
 
+
+// Description: Get one specific item by its ID
+router.get('/:id', async (req, res) => {
+    try {
+        const equipment = await Equipment.findById(req.params.id);
+        if (!equipment) {
+            return res.status(404).json("Equipment not found");
+        }
+        res.status(200).json(equipment);
+    } catch (err) {
+        res.status(500).json(err);
+    }
+});
+
 module.exports = router;
