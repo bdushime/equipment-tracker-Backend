@@ -11,6 +11,15 @@ const transactionSchema = new mongoose.Schema({
         ref: 'Equipment',   
         required: true
     },
+    // --- NEW FIELD: When does the booking START? ---
+    // For immediate borrow, this is Date.now(). 
+    // For reservations, this is a future date.
+    startTime: {
+        type: Date,
+        required: true,
+        default: Date.now 
+    },
+    // We keep checkoutTime for record-keeping of when they actually picked it up
     checkoutTime: {
         type: Date,
         default: Date.now
@@ -33,8 +42,10 @@ const transactionSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['Active', 'Returned', 'Overdue'],
-        default: 'Active'
+        // UPDATED ENUM: Added 'Reserved' and 'Borrowed'
+        // 'Active' is kept for backward compatibility if you have old data
+        enum: ['Active', 'Borrowed', 'Returned', 'Overdue', 'Reserved', 'Cancelled'],
+        default: 'Borrowed'
     },
     
     checkoutPhotoUrl: { type: String, default: "" },

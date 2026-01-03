@@ -167,4 +167,67 @@ router.get('/my-history', verifyToken, async (req, res) => {
     }
 });
 
+// POST /api/transactions/reserve
+router.post('/reserve', verifyToken, async (req, res) => {
+    try {
+        const { equipmentId, reservationDate, reservationTime, purpose, location, course } = req.body;
+
+        // 1. Calculate Start and End Times
+        // Combine date ("2025-10-25") and time ("14:00")
+        const startString = `${reservationDate}T${reservationTime}:00`;
+        const startTime = new Date(startString);
+        
+        // Validation: Invalid Date
+        if (isNaN(startTime.getTime())) {
+            return res.status(400).json({ message: "Invalid date or time format." });
+        }
+
+        // Default duration: 2 hours (You can change this logic later)
+        const endTime = new Date(startTime.getTime() + 2 * 60 * 60 * 1000); 
+
+        // 2. Validate: Cannot reserve in the past
+        if (startTime < new Date()) {
+            return res.status(400).json({ message: "Cannot reserve for a past date/time." });
+        }
+
+        // 3. CONFLICT CHECK: Is it already booked?
+        // We look for any "Active", "Borrowed", or "Reserved" transaction that overlaps.
+        const conflict = await Transaction.find({
+            equipment: equipmentId,
+            status: { $in: ['Active', 'Borrowed', 'Reserved'] },
+            $or: [
+                // New start time is inside an existing booking
+                { startTime: { $lte: startTime }, expectedReturnTime: { $gt: startTime } },
+                // New end time is inside an existing booking
+                { startTime: { $lt: endTime }, expectedReturnTime: { $gte: endTime } },
+                // New booking completely covers an existing one
+                { startTime: { $gte: startTime }, expectedReturnTime: { $lte: endTime } }
+            ]
+        });
+
+        if (conflict.length > 0) {
+            return res.status(409).json({ message: "Equipment is already booked for this time slot." });
+        }
+
+        // 4. Create Reservation
+        const newReservation = new Transaction({
+            user: req.user.id,
+            equipment: equipmentId,
+            startTime: startTime,
+            expectedReturnTime: endTime,
+            destination: `${location} (${course})`,
+            purpose: purpose,
+            status: 'Reserved' 
+        });
+
+        await newReservation.save();
+
+        res.status(201).json({ message: "Reservation confirmed!", reservation: newReservation });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json(err);
+    }
+});
+
 module.exports = router;
