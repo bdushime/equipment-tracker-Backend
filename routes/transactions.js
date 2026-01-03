@@ -151,4 +151,20 @@ router.post('/checkin', verifyToken, async (req, res) => {
     }
 });
 
+// GET /api/transactions/my-history
+router.get('/my-history', verifyToken, async (req, res) => {
+    try {
+        const history = await Transaction.find({ 
+            user: req.user.id 
+        })
+        .populate('equipment')
+        .sort({ updatedAt: -1 }) // Newest first
+        .limit(10); // Only get the last 10 actions
+
+        res.status(200).json(history);
+    } catch (err) {
+        res.status(500).json(err);
+    }
+});
+
 module.exports = router;
