@@ -167,7 +167,7 @@ router.get('/my-history', verifyToken, async (req, res) => {
     }
 });
 
-// POST /api/transactions/reserve
+// POST /api/transactions/reservee
 router.post('/reserve', verifyToken, async (req, res) => {
     try {
         const { equipmentId, reservationDate, reservationTime, purpose, location, course } = req.body;
