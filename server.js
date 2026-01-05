@@ -9,7 +9,7 @@ const authRoute = require('./routes/auth');
 const userRoute = require('./routes/users');
 const transactionRoute = require('./routes/transactions');
 const startOverdueCheck = require('./utils/overdueCheck');
-const ticketRoute = require('./routes/tickets');
+const ticketRoute = require('./models/Ticket');
 
 
 const app = express();
