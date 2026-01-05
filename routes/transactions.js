@@ -230,4 +230,36 @@ router.post('/reserve', verifyToken, async (req, res) => {
     }
 });
 
+
+// POST /api/transactions/cancel/:id
+router.post('/cancel/:id', verifyToken, async (req, res) => {
+    try {
+        const transactionId = req.params.id;
+        const transaction = await Transaction.findById(transactionId);
+
+        if (!transaction) {
+            return res.status(404).json({ message: "Transaction not found." });
+        }
+
+        // Security: Ensure the user owns this transaction
+        if (transaction.user.toString() !== req.user.id) {
+            return res.status(403).json({ message: "Unauthorized: You do not own this reservation." });
+        }
+
+        // Logic: Can only cancel 'Reserved' items (not Active/Borrowed ones)
+        if (transaction.status !== 'Reserved') {
+            return res.status(400).json({ message: "Only reservations can be cancelled." });
+        }
+
+        transaction.status = 'Cancelled';
+        await transaction.save();
+
+        res.status(200).json({ message: "Reservation cancelled successfully." });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json(err);
+    }
+});
+
 module.exports = router;
