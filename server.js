@@ -10,6 +10,7 @@ const userRoute = require('./routes/users');
 const transactionRoute = require('./routes/transactions');
 const startOverdueCheck = require('./utils/overdueCheck');
 const ticketRoute = require('./models/Ticket');
+const analyticsRoute = require('./routes/analytics');
 
 
 const app = express();
@@ -24,6 +25,7 @@ app.use('/api/users', userRoute);
 app.use('/api/transactions', transactionRoute);
 app.use('/api/gate', require('./routes/gate'));
 app.use('/api/tickets', ticketRoute);
+app.use('/api/analytics', analyticsRoute);
 
 
 
