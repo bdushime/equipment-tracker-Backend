@@ -4,38 +4,52 @@ const Equipment = require('../models/Equipment');
 const Transaction = require('../models/Transaction');
 const { verifyToken } = require('../middleware/verifyToken');
 
-// GET /api/analytics/dashboard
 router.get('/dashboard', verifyToken, async (req, res) => {
     try {
-        // 1. Calculate Metrics
+        // --- 1. Basic Counters ---
         const totalDevices = await Equipment.countDocuments();
-        
-        // Active = Borrowed OR Overdue
-        const activeLoans = await Transaction.countDocuments({ 
-            status: { $in: ['Borrowed', 'Overdue'] } 
-        });
-
-        // Overdue specifically
+        const activeLoans = await Transaction.countDocuments({ status: { $in: ['Borrowed', 'Overdue'] } });
         const overdueLoans = await Transaction.countDocuments({ status: 'Overdue' });
-
-        // Lost items (Looking at Equipment status)
         const lostDevices = await Equipment.countDocuments({ status: 'Lost' });
 
-        // 2. Fetch Recent Activity (Last 5 transactions)
+        // --- 2. Recent Activity ---
         const rawActivity = await Transaction.find()
             .sort({ createdAt: -1 })
             .limit(5)
-            .populate('user', 'name email') // Get student name
-            .populate('equipment', 'name'); // Get device name
+            .populate('user', 'username email') 
+            .populate('equipment', 'name');
 
-        // Format activity for the frontend
         const recentActivity = rawActivity.map(t => ({
             id: t._id,
             deviceName: t.equipment ? t.equipment.name : "Unknown Device",
-            description: `${t.status} by ${t.user ? t.user.name : "Unknown User"}`,
+            description: `${t.status} by ${t.user ? t.user.username : "Unknown User"}`,
             timestamp: t.updatedAt || t.createdAt,
             returned: t.status === 'Returned'
         }));
+
+        // --- 3. DYNAMIC CHARTS DATA 📊 ---
+        
+        // A. Device Types (Bar Chart) -- UPDATED FIX 🛠️
+        // We now group by '$type' because that is what your database has!
+        const categoryStats = await Equipment.aggregate([
+            { $group: { _id: "$type", count: { $sum: 1 } } }
+        ]);
+        
+        const deviceTypes = categoryStats.map(stat => ({
+            name: stat._id || "Other", // If type is missing, call it "Other"
+            count: stat.count
+        }));
+
+        // B. Monthly Trends (Line Chart)
+        // This will stay flat until we create real transactions
+        const activityTrends = [
+            { name: "Jan", checkouts: 0, returns: 0 },
+            { name: "Feb", checkouts: 0, returns: 0 },
+            { name: "Mar", checkouts: 0, returns: 0 },
+            { name: "Apr", checkouts: 0, returns: 0 },
+            { name: "May", checkouts: 0, returns: 0 },
+            { name: "Jun", checkouts: 0, returns: 0 },
+        ];
 
         res.json({
             metrics: {
@@ -44,7 +58,11 @@ router.get('/dashboard', verifyToken, async (req, res) => {
                 lost: lostDevices,
                 overdue: overdueLoans
             },
-            recentActivity
+            recentActivity,
+            charts: {
+                deviceTypes,   
+                activityTrends 
+            }
         });
 
     } catch (err) {
