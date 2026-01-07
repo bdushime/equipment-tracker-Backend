@@ -1,16 +1,22 @@
 const mongoose = require('mongoose');
 
-
 const equipmentSchema = new mongoose.Schema({
   name: { 
       type: String, 
       required: true 
   }, 
   
+  // Added Description Field ✅
+  description: {
+      type: String,
+      default: ""
+  },
+
   type: { 
       type: String, 
       required: true,
-      enum: ['Laptop', 'Projector', 'Camera', 'Microphone', 'Other'] 
+      // Note: If you want to allow 'Tablet', 'Audio', 'Accessories', add them here!
+      enum: ['Laptop', 'Projector', 'Camera', 'Microphone', 'Tablet', 'Audio', 'Accessories', 'Other'] 
   }, 
   
   serialNumber: { 
@@ -25,11 +31,16 @@ const equipmentSchema = new mongoose.Schema({
       enum: ['Available', 'Checked Out', 'Maintenance', 'Lost']
   },
 
+  // Added Location Field ✅
+  location: {
+      type: String,
+      default: "Main Storage"
+  },
+
   condition: {
       type: String,
       default: 'Good'
   },
-  
   
 }, { timestamps: true }); 
 
