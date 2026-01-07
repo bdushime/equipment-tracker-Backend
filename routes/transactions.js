@@ -21,7 +21,7 @@ router.get('/active', verifyToken, async (req, res) => {
             status: { $in: ['Pending', 'Checked Out', 'Overdue','Borrowed'] } 
         })
         .populate('equipment', 'name serialNumber') 
-        .populate('user', 'username email score') // Populates student score
+        .populate('user', 'username email responsibilityScore')
         .sort({ createdAt: -1 });
 
         res.status(200).json(transactions);
