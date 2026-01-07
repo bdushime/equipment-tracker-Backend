@@ -1,7 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const Transaction = require('../models/Transaction');
+// FIXED: Added checkRole import here 👇
 const { verifyToken } = require('../middleware/verifyToken');
+const { checkRole } = require('../middleware/checkRole'); 
+
 const Equipment = require('../models/Equipment');
 const User = require('../models/User');
 const AuditLog = require('../models/AuditLog'); 
@@ -9,18 +12,19 @@ const AuditLog = require('../models/AuditLog');
 const MAX_LOAN_HOURS = 24; 
 
 // ==========================================
-// 1. Get ALL Active Loans (For IT Staff)
+// 1. Get Active Loans & Requests (For IT Staff)
 // ==========================================
+// Fetches 'Pending', 'Checked Out', and 'Overdue' + Student Score
 router.get('/active', verifyToken, async (req, res) => {
     try {
-        const activeTx = await Transaction.find({ 
-            status: { $in: ['Borrowed', 'Overdue'] } 
+        const transactions = await Transaction.find({ 
+            status: { $in: ['Pending', 'Checked Out', 'Overdue'] } 
         })
         .populate('equipment', 'name serialNumber') 
-        .populate('user', 'username email')         
-        .sort({ expectedReturnTime: 1 });           
+        .populate('user', 'username email score') // Populates student score
+        .sort({ createdAt: -1 });
 
-        res.status(200).json(activeTx);
+        res.status(200).json(transactions);
     } catch (err) {
         console.error("Error fetching active transactions:", err);
         res.status(500).json({ message: "Server Error" });
@@ -46,7 +50,7 @@ router.get('/my-borrowed', verifyToken, async (req, res) => {
 });
 
 // ==========================================
-// 3. Borrow Item (Checkout)
+// 3. Borrow Item (Checkout / Request)
 // ==========================================
 router.post('/checkout', verifyToken, async (req, res) => {
     try {
@@ -79,16 +83,22 @@ router.post('/checkout', verifyToken, async (req, res) => {
             return res.status(400).json({ message: "Error: Equipment is not available." });
         }
 
-        // Create Transaction
+        // Create Transaction (Default to 'Pending' if student requests, or 'Borrowed' if IT does it directly)
+        // For now, we assume direct checkout = 'Borrowed', or you can change to 'Pending' if you want approval step for everyone.
+        // Based on your new flow, if IT creates it, it's 'Checked Out'. If Student requests, it's 'Pending'.
+        
+        // Assuming this route is used by IT Staff for now:
+        const status = 'Checked Out'; 
+
         const newTransaction = new Transaction({
             user: targetUserId,
             equipment: equipmentId,
             expectedReturnTime: expectedReturnTime,
             destination: destination,
             purpose: purpose,
-            checkoutPhotoUrl: "", 
-            signatureUrl: "",
-            status: 'Borrowed' 
+            checkoutPhotoUrl: req.body.checkoutPhotoUrl || "", 
+            signatureUrl: req.body.signatureUrl || "",
+            status: status 
         });
         const savedTransaction = await newTransaction.save();
 
@@ -112,7 +122,7 @@ router.post('/checkout', verifyToken, async (req, res) => {
 });
 
 // ==========================================
-// 4. Return Item (Check-in) -- FIXED LOGIC ✅
+// 4. Return Item (Check-in)
 // ==========================================
 router.post('/checkin', verifyToken, async (req, res) => {
     try {
@@ -131,10 +141,10 @@ router.post('/checkin', verifyToken, async (req, res) => {
 
         // 1. Update Transaction
         transaction.returnTime = Date.now();
-        transaction.status = 'Returned'; // Always mark as Returned so it clears from dashboard
+        transaction.status = 'Returned'; 
         transaction.condition = condition || "Good"; 
         
-        // 2. Check Lateness (Logic only, does not change status to Overdue)
+        // 2. Check Lateness
         const isLate = new Date() > new Date(transaction.expectedReturnTime);
         
         await transaction.save();
@@ -169,7 +179,7 @@ router.post('/checkin', verifyToken, async (req, res) => {
 });
 
 // ==========================================
-// 5. Get History
+// 5. Get Student's History
 // ==========================================
 router.get('/my-history', verifyToken, async (req, res) => {
     try {
@@ -241,17 +251,15 @@ router.post('/reserve', verifyToken, async (req, res) => {
     }
 });
 
-
-  // ==========================================
-// 🆕 GET ALL HISTORY (For IT Staff Reports)
+// ==========================================
+// 7. GET ALL HISTORY (For IT Staff Reports)
 // ==========================================
 router.get('/all-history', verifyToken, async (req, res) => {
     try {
-        // Fetch ALL transactions, sorted by newest first
         const history = await Transaction.find()
-            .populate('equipment', 'name serialNumber') // Get item details
-            .populate('user', 'username email')         // Get user details
-            .sort({ updatedAt: -1 });                   // Newest first
+            .populate('equipment', 'name serialNumber') 
+            .populate('user', 'username email')         
+            .sort({ updatedAt: -1 });                   
 
         res.status(200).json(history);
     } catch (err) {
@@ -260,10 +268,38 @@ router.get('/all-history', verifyToken, async (req, res) => {
     }
 });
 
+// ==========================================
+// 8. Handle Approve / Deny Request
+// ==========================================
+router.put('/:id/respond', verifyToken, checkRole(['IT', 'Admin']), async (req, res) => {
+    try {
+        const { action } = req.body; // action = 'Approve' or 'Deny'
+        const transaction = await Transaction.findById(req.params.id);
 
+        if (!transaction) return res.status(404).json("Transaction not found");
+
+        if (action === 'Approve') {
+            transaction.status = 'Checked Out';
+            transaction.createdAt = new Date(); 
+        } else if (action === 'Deny') {
+            transaction.status = 'Denied';
+            // IMPORTANT: If you denied it, make sure equipment goes back to Available if it was held
+            const equipment = await Equipment.findById(transaction.equipment);
+            if(equipment && equipment.status !== 'Available') {
+                 equipment.status = 'Available';
+                 await equipment.save();
+            }
+        }
+
+        await transaction.save();
+        res.status(200).json(transaction);
+    } catch (err) {
+        res.status(500).json(err);
+    }
+});
 
 // ==========================================
-// 7. Cancel Reservation
+// 9. Cancel Reservation
 // ==========================================
 router.post('/cancel/:id', verifyToken, async (req, res) => {
     try {
