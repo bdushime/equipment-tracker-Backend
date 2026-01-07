@@ -12,12 +12,34 @@ router.get('/dashboard', verifyToken, async (req, res) => {
         const overdueLoans = await Transaction.countDocuments({ status: 'Overdue' });
         const lostDevices = await Equipment.countDocuments({ status: 'Lost' });
 
-        // --- 2. Recent Activity ---
+        // --- 2. Recent Activity (DEBUG MODE 🕵️‍♂️) ---
+        console.log("------------------------------------------------");
+        console.log("🕵️‍♂️ ANALYTICS ROUTE HIT");
+
+        // A. Check total raw count first (No filters, no population)
+        const rawCount = await Transaction.countDocuments();
+        console.log(`📊 Total Transactions in DB: ${rawCount}`);
+
         const rawActivity = await Transaction.find()
             .sort({ createdAt: -1 })
             .limit(5)
             .populate('user', 'username email') 
             .populate('equipment', 'name');
+
+        console.log(`✅ Transactions Fetched for Dashboard: ${rawActivity.length}`);
+
+        // B. Inspect the first item if it exists
+        if (rawActivity.length > 0) {
+            const firstItem = rawActivity[0];
+            console.log("📄 SAMPLE TRANSACTION (First Item):");
+            console.log("   - ID:", firstItem._id);
+            console.log("   - User Field:", firstItem.user); // Is this null?
+            console.log("   - Equip Field:", firstItem.equipment); // Is this null?
+            console.log("   - Status:", firstItem.status);
+        } else {
+            console.log("⚠️ No transactions found in query.");
+        }
+        console.log("------------------------------------------------");
 
         const recentActivity = rawActivity.map(t => ({
             id: t._id,
@@ -28,20 +50,16 @@ router.get('/dashboard', verifyToken, async (req, res) => {
         }));
 
         // --- 3. DYNAMIC CHARTS DATA 📊 ---
-        
-        // A. Device Types (Bar Chart) -- UPDATED FIX 🛠️
-        // We now group by '$type' because that is what your database has!
         const categoryStats = await Equipment.aggregate([
             { $group: { _id: "$type", count: { $sum: 1 } } }
         ]);
         
         const deviceTypes = categoryStats.map(stat => ({
-            name: stat._id || "Other", // If type is missing, call it "Other"
+            name: stat._id || "Other",
             count: stat.count
         }));
 
-        // B. Monthly Trends (Line Chart)
-        // This will stay flat until we create real transactions
+        // Default placeholder trends
         const activityTrends = [
             { name: "Jan", checkouts: 0, returns: 0 },
             { name: "Feb", checkouts: 0, returns: 0 },
