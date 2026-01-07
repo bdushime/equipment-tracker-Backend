@@ -5,17 +5,42 @@ const { verifyToken } = require('../middleware/verifyToken');
 const Equipment = require('../models/Equipment');
 const User = require('../models/User');
 const AuditLog = require('../models/AuditLog'); 
+
 const MAX_LOAN_HOURS = 24; 
 
-// --- NEW ROUTE: Get My Active Borrows (Active Loans/Timer) ---
-// This finds items where 'returnTime' is null (meaning not returned yet)
+// ==========================================
+// 🆕 NEW ROUTE: Get ALL Active Loans (For IT Staff)
+// ==========================================
+// This is used by the "Select Return Item" page to list what needs to be returned.
+router.get('/active', verifyToken, async (req, res) => {
+    try {
+        // Find transactions where status is EITHER 'Borrowed' OR 'Overdue'
+        const activeTx = await Transaction.find({ 
+            status: { $in: ['Borrowed', 'Overdue'] } 
+        })
+        .populate('equipment', 'name serialNumber') // Get item details
+        .populate('user', 'username email')         // Get student name
+        .sort({ expectedReturnTime: 1 });           // Show soonest due first
+
+        res.status(200).json(activeTx);
+    } catch (err) {
+        console.error("Error fetching active transactions:", err);
+        res.status(500).json({ message: "Server Error" });
+    }
+});
+
+// ==========================================
+// EXISTING ROUTES BELOW
+// ==========================================
+
+// GET /api/transactions/my-borrowed (Student's Active Loans)
 router.get('/my-borrowed', verifyToken, async (req, res) => {
     try {
         const activeTransactions = await Transaction.find({ 
             user: req.user.id,      // Match the logged-in user
             returnTime: null        // Only get items NOT yet returned
         })
-        .populate('equipment')      // <--- IMPORTANT: Get the Equipment Name/Details
+        .populate('equipment')      
         .sort({ expectedReturnTime: 1 }); // Sort by soonest due first
 
         res.status(200).json(activeTransactions);
@@ -24,20 +49,17 @@ router.get('/my-borrowed', verifyToken, async (req, res) => {
     }
 });
 
-// URL: http://localhost:5001/api/transactions/checkout
+// POST /api/transactions/checkout (Borrow Item)
 router.post('/checkout', verifyToken, async (req, res) => {
     try {
         const { userId, equipmentId, expectedReturnTime, destination, purpose } = req.body;
 
-        // Note: verifyToken puts the logged-in user in req.user.id
-        // We generally should trust that over the 'userId' sent in the body for security,
-        // but since your system might be used by an Admin checking out for a student, 
-        // we'll keep using 'userId' from body if that's your logic.
+        // Determine user ID (admin override or logged-in user)
         const targetUserId = userId || req.user.id; 
 
+        // 1. Security Check: Responsibility Score
         const user = await User.findById(targetUserId);
         if (user.responsibilityScore < 70) {
-            
             await AuditLog.create({
                 action: "CHECKOUT_DENIED",
                 user: targetUserId,
@@ -46,7 +68,7 @@ router.post('/checkout', verifyToken, async (req, res) => {
             return res.status(403).json({ message: "Security Alert: You are banned from borrowing equipment due to low responsibility score." });
         }
 
-        
+        // 2. Policy Check: Max Loan Duration
         const returnDate = new Date(expectedReturnTime);
         const now = new Date();
         const hoursDifference = Math.abs(returnDate - now) / 36e5; 
@@ -55,30 +77,30 @@ router.post('/checkout', verifyToken, async (req, res) => {
             return res.status(400).json({ message: `Security Policy: You cannot borrow items for more than ${MAX_LOAN_HOURS} hours.` });
         }
 
-      
+        // 3. Availability Check
         const equipment = await Equipment.findById(equipmentId);
         if (!equipment || equipment.status !== 'Available') {
             return res.status(400).json({ message: "Error: Equipment is not available." });
         }
 
-        
+        // 4. Create Transaction
         const newTransaction = new Transaction({
             user: targetUserId,
             equipment: equipmentId,
             expectedReturnTime: expectedReturnTime,
             destination: destination,
             purpose: purpose,
-            
             checkoutPhotoUrl: "", 
-            signatureUrl: ""
+            signatureUrl: "",
+            status: 'Borrowed' // Ensure status is explicitly set to Borrowed
         });
         const savedTransaction = await newTransaction.save();
 
-        
+        // 5. Update Equipment Status
         equipment.status = 'Checked Out';
         await equipment.save();
 
-    
+        // 6. Log it
         await AuditLog.create({
             action: "CHECKOUT_SUCCESS",
             user: targetUserId,
@@ -93,7 +115,7 @@ router.post('/checkout', verifyToken, async (req, res) => {
     }
 });
 
-
+// POST /api/transactions/checkin (Return Item)
 router.post('/checkin', verifyToken, async (req, res) => {
     try {
         const { userId, equipmentId, condition } = req.body;
@@ -113,28 +135,27 @@ router.post('/checkin', verifyToken, async (req, res) => {
         transaction.status = 'Returned';
         transaction.condition = condition || "Good"; 
         
-  
+        // Late Check
         const isLate = new Date() > new Date(transaction.expectedReturnTime);
         if (isLate) {
-            transaction.status = 'Overdue'; 
+            transaction.status = 'Overdue'; // Optional: keep as Returned but mark late flag if you prefer
         }
         
         await transaction.save();
 
-  
+        // Update Equipment
         const equipment = await Equipment.findById(equipmentId);
         equipment.status = 'Available';
         equipment.condition = condition || equipment.condition; 
         await equipment.save();
 
+        // Update Score
         const user = await User.findById(targetUserId);
 
         if (isLate) {
-       
             user.responsibilityScore -= 10; 
         } else {
             user.responsibilityScore += 5;  
-            
             if (user.responsibilityScore > 100) user.responsibilityScore = 100;
         }
         await user.save();
@@ -173,16 +194,13 @@ router.post('/reserve', verifyToken, async (req, res) => {
         const { equipmentId, reservationDate, reservationTime, purpose, location, course } = req.body;
 
         // 1. Calculate Start and End Times
-        // Combine date ("2025-10-25") and time ("14:00")
         const startString = `${reservationDate}T${reservationTime}:00`;
         const startTime = new Date(startString);
         
-        // Validation: Invalid Date
         if (isNaN(startTime.getTime())) {
             return res.status(400).json({ message: "Invalid date or time format." });
         }
 
-        // Default duration: 2 hours (You can change this logic later)
         const endTime = new Date(startTime.getTime() + 2 * 60 * 60 * 1000); 
 
         // 2. Validate: Cannot reserve in the past
@@ -190,17 +208,13 @@ router.post('/reserve', verifyToken, async (req, res) => {
             return res.status(400).json({ message: "Cannot reserve for a past date/time." });
         }
 
-        // 3. CONFLICT CHECK: Is it already booked?
-        // We look for any "Active", "Borrowed", or "Reserved" transaction that overlaps.
+        // 3. CONFLICT CHECK
         const conflict = await Transaction.find({
             equipment: equipmentId,
             status: { $in: ['Active', 'Borrowed', 'Reserved'] },
             $or: [
-                // New start time is inside an existing booking
                 { startTime: { $lte: startTime }, expectedReturnTime: { $gt: startTime } },
-                // New end time is inside an existing booking
                 { startTime: { $lt: endTime }, expectedReturnTime: { $gte: endTime } },
-                // New booking completely covers an existing one
                 { startTime: { $gte: startTime }, expectedReturnTime: { $lte: endTime } }
             ]
         });
@@ -230,7 +244,6 @@ router.post('/reserve', verifyToken, async (req, res) => {
     }
 });
 
-
 // POST /api/transactions/cancel/:id
 router.post('/cancel/:id', verifyToken, async (req, res) => {
     try {
@@ -241,12 +254,10 @@ router.post('/cancel/:id', verifyToken, async (req, res) => {
             return res.status(404).json({ message: "Transaction not found." });
         }
 
-        // Security: Ensure the user owns this transaction
         if (transaction.user.toString() !== req.user.id) {
             return res.status(403).json({ message: "Unauthorized: You do not own this reservation." });
         }
 
-        // Logic: Can only cancel 'Reserved' items (not Active/Borrowed ones)
         if (transaction.status !== 'Reserved') {
             return res.status(400).json({ message: "Only reservations can be cancelled." });
         }
