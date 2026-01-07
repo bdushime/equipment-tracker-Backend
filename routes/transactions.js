@@ -241,6 +241,27 @@ router.post('/reserve', verifyToken, async (req, res) => {
     }
 });
 
+
+  // ==========================================
+// 🆕 GET ALL HISTORY (For IT Staff Reports)
+// ==========================================
+router.get('/all-history', verifyToken, async (req, res) => {
+    try {
+        // Fetch ALL transactions, sorted by newest first
+        const history = await Transaction.find()
+            .populate('equipment', 'name serialNumber') // Get item details
+            .populate('user', 'username email')         // Get user details
+            .sort({ updatedAt: -1 });                   // Newest first
+
+        res.status(200).json(history);
+    } catch (err) {
+        console.error("History Error:", err);
+        res.status(500).json({ message: "Server Error" });
+    }
+});
+
+
+
 // ==========================================
 // 7. Cancel Reservation
 // ==========================================
