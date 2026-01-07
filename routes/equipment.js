@@ -18,17 +18,13 @@ router.post('/', verifyToken, checkRole(['IT', 'Admin']), async (req, res) => {
 });
 
 // ==========================================
-// 2. BROWSE & FILTER ROUTE (New! ✨)
+// 2. BROWSE & FILTER ROUTE
 // ==========================================
-// This handles search, category filtering, and status filtering.
-// MUST come before router.get('/:id')
 router.get('/browse', async (req, res) => {
     try {
         const { search, category, status } = req.query;
-        
         let query = {};
 
-        // A. Search by Name or Description (Case insensitive)
         if (search) {
             query.$or = [
                 { name: { $regex: search, $options: 'i' } },
@@ -36,19 +32,15 @@ router.get('/browse', async (req, res) => {
             ];
         }
 
-        // B. Filter by Category
-        // Note: Frontend sends 'category', Schema uses 'type'
         if (category && category !== 'All Categories') {
             query.type = category; 
         }
 
-        // C. Filter by Availability
         if (status) {
             if (status === 'Available') query.status = 'Available';
             if (status === 'Unavailable') query.status = { $ne: 'Available' };
         }
 
-        // Return results sorted by name
         const equipment = await Equipment.find(query).sort({ name: 1 });
         res.status(200).json(equipment);
 
@@ -71,17 +63,38 @@ router.get('/', async (req, res) => {
 });
 
 // ==========================================
-// 4. Update Equipment
+// 4. Update Equipment (With Spy Logs 🕵️‍♂️)
 // ==========================================
 router.put('/:id', async (req, res) => {
     try {
+        console.log("-----------------------------------------");
+        console.log("📝 UPDATE REQUEST RECEIVED");
+        console.log("🆔 ID:", req.params.id);
+        console.log("📦 BODY:", req.body);
+
+        // 1. Check if ID is valid
+        if (!req.params.id || req.params.id === 'undefined') {
+            console.log("❌ ERROR: Invalid ID");
+            return res.status(400).json({ message: "Invalid ID provided" });
+        }
+
+        // 2. Attempt the update
         const updatedEquipment = await Equipment.findByIdAndUpdate(
             req.params.id, 
             { $set: req.body }, 
-            { new: true }       
+            { new: true, runValidators: true } // runValidators ensures data matches Schema rules
         );
+
+        if (!updatedEquipment) {
+            console.log("❌ ERROR: Equipment not found in DB with that ID");
+            return res.status(404).json({ message: "Equipment not found" });
+        }
+
+        console.log("✅ SUCCESS: Updated item:", updatedEquipment.name);
         res.status(200).json(updatedEquipment);
+
     } catch (err) {
+        console.error("🔥 CRASH during update:", err);
         res.status(500).json(err);
     }
 });
