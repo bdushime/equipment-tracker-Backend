@@ -55,7 +55,13 @@ router.get('/my-borrowed', verifyToken, async (req, res) => {
 router.post('/checkout', verifyToken, async (req, res) => {
     try {
         const { userId, equipmentId, expectedReturnTime, destination, purpose } = req.body;
-        const targetUserId = userId || req.user.id; 
+        
+        // Determine who is making the request
+        const isStudent = req.user.role === 'Student';
+        
+        // If Student, they can only request for themselves.
+        // If IT, they can assign to anyone (userId provided in body).
+        const targetUserId = isStudent ? req.user.id : (userId || req.user.id);
 
         // Security Check: Score
         const user = await User.findById(targetUserId);
@@ -83,12 +89,10 @@ router.post('/checkout', verifyToken, async (req, res) => {
             return res.status(400).json({ message: "Error: Equipment is not available." });
         }
 
-        // Create Transaction (Default to 'Pending' if student requests, or 'Borrowed' if IT does it directly)
-        // For now, we assume direct checkout = 'Borrowed', or you can change to 'Pending' if you want approval step for everyone.
-        // Based on your new flow, if IT creates it, it's 'Checked Out'. If Student requests, it's 'Pending'.
-        
-        // Assuming this route is used by IT Staff for now:
-        const status = 'Checked Out'; 
+        // --- CRITICAL CHANGE HERE ---
+        // If Student -> 'Pending'
+        // If IT Staff -> 'Checked Out'
+        const initialStatus = isStudent ? 'Pending' : 'Checked Out';
 
         const newTransaction = new Transaction({
             user: targetUserId,
@@ -98,19 +102,24 @@ router.post('/checkout', verifyToken, async (req, res) => {
             purpose: purpose,
             checkoutPhotoUrl: req.body.checkoutPhotoUrl || "", 
             signatureUrl: req.body.signatureUrl || "",
-            status: status 
+            status: initialStatus // <--- Dynamic Status
         });
         const savedTransaction = await newTransaction.save();
 
-        // Update Equipment
-        equipment.status = 'Checked Out';
-        await equipment.save();
+        // ONLY update equipment status if IT Staff does it immediately.
+        // If it's Pending, the equipment stays 'Available' (or you can mark it 'Reserved' if you prefer) until approved.
+        if (!isStudent) {
+            equipment.status = 'Checked Out';
+            await equipment.save();
+        } 
+        // Optional: If Student requests, maybe mark equipment as 'Pending' so others don't take it?
+        // For now, let's leave it 'Available' so IT can decide, or change to 'Reserved' if you prefer.
 
         // Log it
         await AuditLog.create({
-            action: "CHECKOUT_SUCCESS",
+            action: isStudent ? "REQUEST_CREATED" : "CHECKOUT_SUCCESS",
             user: targetUserId,
-            details: `Borrowed ${equipment.name} (Serial: ${equipment.serialNumber})`
+            details: `${isStudent ? 'Requested' : 'Borrowed'} ${equipment.name}`
         });
 
         res.status(201).json(savedTransaction);
