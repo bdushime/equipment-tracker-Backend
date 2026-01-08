@@ -358,7 +358,7 @@ router.post('/cancel/:id', verifyToken, async (req, res) => {
 });
 
 
-// 10. GET ALL HISTORY (For IT Staff Reports)
+// 10. GET ALL HISTORY (For IT Staff Reportss)
 // ==========================================
 router.get('/all-history', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), async (req, res) => {
     try {
