@@ -65,7 +65,7 @@ router.post('/checkout', verifyToken, async (req, res) => {
 
         // Security Check: Score
         const user = await User.findById(targetUserId);
-        if (user.responsibilityScore < 70) {
+        if (user.responsibilityScore < 60) {
             await AuditLog.create({
                 action: "CHECKOUT_DENIED",
                 user: targetUserId,
