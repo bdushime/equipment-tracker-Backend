@@ -357,4 +357,22 @@ router.post('/cancel/:id', verifyToken, async (req, res) => {
     }
 });
 
+
+// 10. GET ALL HISTORY (For IT Staff Reports)
+// ==========================================
+router.get('/all-history', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), async (req, res) => {
+    try {
+        // Fetch ALL transactions, sorted by newest first
+        const transactions = await Transaction.find()
+            .populate('user', 'username email responsibilityScore') // Get student name, email, score
+            .populate('equipment', 'name serialNumber category status') // Get equipment details
+            .sort({ createdAt: -1 });
+
+        res.status(200).json(transactions);
+    } catch (err) {
+        console.error("Report fetch error:", err);
+        res.status(500).json(err);
+    }
+});
+
 module.exports = router;
