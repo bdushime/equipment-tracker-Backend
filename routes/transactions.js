@@ -278,7 +278,7 @@ router.get('/all-history', verifyToken, async (req, res) => {
 });
 
 // ==========================================
-// 8. Handle Approve / Deny Request
+// 8. Handle Approve / Deny Requestt
 // ==========================================
 router.put('/:id/respond', verifyToken, checkRole(['IT','IT_Staff', 'Admin']), async (req, res) => {
     try {
