@@ -280,7 +280,7 @@ router.get('/all-history', verifyToken, async (req, res) => {
 // ==========================================
 // 8. Handle Approve / Deny Request
 // ==========================================
-router.put('/:id/respond', verifyToken, checkRole(['IT', 'Admin']), async (req, res) => {
+router.put('/:id/respond', verifyToken, checkRole(['IT','IT_Staff', 'Admin']), async (req, res) => {
     try {
         const { action } = req.body; // action = 'Approve' or 'Deny'
         const transaction = await Transaction.findById(req.params.id);
