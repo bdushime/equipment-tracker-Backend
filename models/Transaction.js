@@ -42,9 +42,18 @@ const transactionSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        // UPDATED ENUM: Added 'Reserved' and 'Borrowed'
-        // 'Active' is kept for backward compatibility if you have old data
-        enum: ['Active', 'Borrowed', 'Returned', 'Overdue', 'Reserved', 'Cancelled'],
+        // 👇 UPDATED: Added 'Pending', 'Denied', and 'Checked Out'
+        enum: [
+            'Active', 
+            'Borrowed', 
+            'Returned', 
+            'Overdue', 
+            'Reserved', 
+            'Cancelled', 
+            'Pending',      // <--- ADDED
+            'Denied',       // <--- ADDED
+            'Checked Out'   // <--- ADDED
+        ],
         default: 'Borrowed'
     },
     
