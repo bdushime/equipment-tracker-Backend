@@ -277,8 +277,9 @@ router.get('/all-history', verifyToken, async (req, res) => {
     }
 });
 
+
 // ==========================================
-// 8. Handle Approve / Deny Request (FIXED TIME LOGIC)
+// 8. Handle Approve / Deny Request (FIXED INVENTORY LOGIC)
 // ==========================================
 router.put('/:id/respond', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), async (req, res) => {
     try {
@@ -290,25 +291,26 @@ router.put('/:id/respond', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), 
         if (action === 'Approve') {
             const now = new Date();
             
-            // 1. Calculate the Duration the student asked for
-            // Duration = Original Due Date - Original Request Time
+            // 1. Recalculate Time (The "Shift" Logic)
             const requestTime = new Date(transaction.createdAt);
             const originalDue = new Date(transaction.expectedReturnTime);
             const durationInMillis = originalDue - requestTime;
 
-            // 2. Reset the clock starting from NOW
-            transaction.checkoutTime = now; // Set actual pickup time
-            
-            // 3. Set New Due Date = Now + Original Duration
-            // Example: If they asked for 2 hours, they get 2 hours starting right now.
+            transaction.checkoutTime = now; 
             transaction.expectedReturnTime = new Date(now.getTime() + durationInMillis);
-
             transaction.status = 'Checked Out';
+
+            // 👇 CRITICAL FIX: Update Equipment to 'Checked Out' so it disappears from the list!
+            const equipment = await Equipment.findById(transaction.equipment);
+            if (equipment) {
+                equipment.status = 'Checked Out';
+                await equipment.save();
+            }
             
         } else if (action === 'Deny') {
             transaction.status = 'Denied';
             
-            // If denied, release the equipment back to 'Available'
+            // If denied, make sure it stays Available
             const equipment = await Equipment.findById(transaction.equipment);
             if(equipment && equipment.status !== 'Available') {
                  equipment.status = 'Available';
