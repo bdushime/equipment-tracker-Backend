@@ -278,21 +278,37 @@ router.get('/all-history', verifyToken, async (req, res) => {
 });
 
 // ==========================================
-// 8. Handle Approve / Deny Requestt
+// 8. Handle Approve / Deny Request (FIXED TIME LOGIC)
 // ==========================================
-router.put('/:id/respond', verifyToken, checkRole(['IT','IT_Staff', 'Admin']), async (req, res) => {
+router.put('/:id/respond', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), async (req, res) => {
     try {
-        const { action } = req.body; // action = 'Approve' or 'Deny'
+        const { action } = req.body; 
         const transaction = await Transaction.findById(req.params.id);
 
         if (!transaction) return res.status(404).json("Transaction not found");
 
         if (action === 'Approve') {
+            const now = new Date();
+            
+            // 1. Calculate the Duration the student asked for
+            // Duration = Original Due Date - Original Request Time
+            const requestTime = new Date(transaction.createdAt);
+            const originalDue = new Date(transaction.expectedReturnTime);
+            const durationInMillis = originalDue - requestTime;
+
+            // 2. Reset the clock starting from NOW
+            transaction.checkoutTime = now; // Set actual pickup time
+            
+            // 3. Set New Due Date = Now + Original Duration
+            // Example: If they asked for 2 hours, they get 2 hours starting right now.
+            transaction.expectedReturnTime = new Date(now.getTime() + durationInMillis);
+
             transaction.status = 'Checked Out';
-            transaction.createdAt = new Date(); 
+            
         } else if (action === 'Deny') {
             transaction.status = 'Denied';
-            // IMPORTANT: If you denied it, make sure equipment goes back to Available if it was held
+            
+            // If denied, release the equipment back to 'Available'
             const equipment = await Equipment.findById(transaction.equipment);
             if(equipment && equipment.status !== 'Available') {
                  equipment.status = 'Available';
@@ -303,6 +319,7 @@ router.put('/:id/respond', verifyToken, checkRole(['IT','IT_Staff', 'Admin']), a
         await transaction.save();
         res.status(200).json(transaction);
     } catch (err) {
+        console.error(err);
         res.status(500).json(err);
     }
 });
