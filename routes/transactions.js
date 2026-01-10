@@ -326,4 +326,74 @@ router.get('/all-history', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), 
     }
 });
 
+
+// ==========================================
+// 11. GET SECURITY DASHBOARD STATS
+// ==========================================
+router.get('/security/dashboard-stats', verifyToken, async (req, res) => {
+    try {
+        // 1. Get Headline Stats
+        const activeCount = await Transaction.countDocuments({ status: 'Checked Out' });
+        const overdueCount = await Transaction.countDocuments({ status: 'Overdue' });
+        
+        // 2. Get Chart Data (Last 6 Months)
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+        const rawTrend = await Transaction.aggregate([
+            { $match: { createdAt: { $gte: sixMonthsAgo } } },
+            {
+                $group: {
+                    _id: { $month: "$createdAt" },
+                    checkouts: { 
+                        $sum: { $cond: [{ $in: ["$status", ["Checked Out", "Returned", "Overdue"]] }, 1, 0] } 
+                    },
+                    overdue: { 
+                        $sum: { $cond: [{ $eq: ["$status", "Overdue"] }, 1, 0] } 
+                    }
+                }
+            },
+            { $sort: { "_id": 1 } }
+        ]);
+
+        // Format for Recharts (Map month numbers 1-12 to "Jan", "Feb"...)
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const trendData = rawTrend.map(item => ({
+            name: monthNames[item._id - 1],
+            checkouts: item.checkouts,
+            failed: item.overdue // Using 'failed' to represent overdue/alerts in the chart
+        }));
+
+        // 3. Get Equipment Category Stats (For Pie Chart)
+        const equipmentStats = await Transaction.aggregate([
+            { $lookup: { from: 'equipment', localField: 'equipment', foreignField: '_id', as: 'eq' } },
+            { $unwind: "$eq" },
+            {
+                $group: {
+                    _id: "$eq.category",
+                    value: { $sum: 1 }
+                }
+            },
+            { $limit: 4 } // Top 4 categories
+        ]);
+
+        const formattedEqStats = equipmentStats.map(item => ({
+            name: item._id || "Uncategorized",
+            value: item.value,
+            color: "#" + Math.floor(Math.random()*16777215).toString(16) // Random color for now
+        }));
+
+        res.status(200).json({
+            activeCount,
+            overdueCount,
+            trendData,
+            equipmentTypeData: formattedEqStats
+        });
+
+    } catch (err) {
+        console.error("Dashboard Stats Error:", err);
+        res.status(500).json(err);
+    }
+});
+
 module.exports = router;
