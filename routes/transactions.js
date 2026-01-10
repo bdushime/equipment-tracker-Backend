@@ -308,7 +308,7 @@ router.post('/cancel/:id', verifyToken, async (req, res) => {
 });
 
 // ==========================================
-// 9. GET ALL HISTORY (For IT Staff Reports)
+// 9. GET ALL HISTORY (For IT Staff Reportss)
 // ==========================================
 // This is the ONE AND ONLY route for reports. 
 // Do NOT add another one.
