@@ -396,4 +396,42 @@ router.get('/security/dashboard-stats', verifyToken, async (req, res) => {
     }
 });
 
+// ==========================================
+// 12. GET SECURITY ACCESS LOGS & STATS
+// ==========================================
+router.get('/security/access-logs', verifyToken, checkRole(['Security', 'Admin', 'IT_Staff']), async (req, res) => {
+    try {
+        // 1. Fetch High-Level Stats
+        const totalBorrowed = await Transaction.countDocuments({ status: 'Checked Out' });
+        const totalOverdue = await Transaction.countDocuments({ status: 'Overdue' });
+        
+        // Count from Equipment table for physical status
+        const totalLost = await Equipment.countDocuments({ status: 'Lost' });
+        const totalDamaged = await Equipment.countDocuments({ status: 'Damaged' });
+
+        // 2. Fetch Recent Logs (Transactions)
+        // We fetch the last 100 events for the log table
+        const logs = await Transaction.find()
+            .populate('user', 'username email role')
+            .populate('equipment', 'name serialNumber category')
+            .sort({ createdAt: -1 })
+            .limit(100);
+
+        res.status(200).json({
+            stats: {
+                totalBorrowed,
+                totalOverdue,
+                totalLost,
+                totalDamaged
+            },
+            logs
+        });
+
+    } catch (err) {
+        console.error("Access Logs Error:", err);
+        res.status(500).json(err);
+    }
+});
+
+
 module.exports = router;
