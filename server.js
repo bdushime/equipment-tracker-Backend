@@ -30,6 +30,7 @@ app.use('/api/tickets', ticketRoute);
 app.use('/api/analytics', analyticsRoute);
 app.use('/api/security', securityRoute);
 app.use('/api/charts', chartsRoute);
+app.use('/api/reports', require('./routes/reports'));
 
 
 const connectDB = async () => {
