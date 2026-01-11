@@ -33,6 +33,7 @@ app.use('/api/charts', chartsRoute);
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/data', require('./routes/data'));
 app.use('/api/monitoring', require('./routes/monitoring'));
+app.use('/api/config', require('./routes/config'));
 
 
 const connectDB = async () => {
