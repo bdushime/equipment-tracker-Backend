@@ -481,4 +481,47 @@ router.get('/admin/dashboard-stats', verifyToken, checkRole(['Admin']), async (r
 });
 
 
+// ==========================================
+// 14. GET SYSTEM SNAPSHOTS (Widgets)
+// ==========================================
+router.get('/admin/snapshots', verifyToken, checkRole(['Admin']), async (req, res) => {
+    try {
+        // 1. Attention Indicators
+        const maintenanceCount = await Equipment.countDocuments({ status: { $in: ['Maintenance', 'Damaged'] } });
+        
+        // 2. Active Policies (From Config)
+        let config = await Config.findOne();
+        if (!config) config = new Config(); // Default if missing
+
+        // Logic: If maintenance mode is ON, it's a warning
+        const configWarnings = config.maintenanceMode ? 1 : 0;
+
+        // 3. System Health (Simulated for MERN app)
+        const health = {
+            uptime: "99.98%",
+            storage: "45%", // In a real app, use 'diskusage' package
+            lastBackup: new Date(Date.now() - 1000 * 60 * 120) // Mock: 2 hours ago
+        };
+
+        res.status(200).json({
+            attention: {
+                sensors: 0, // Mock: No real IOT sensors yet
+                maintenance: maintenanceCount,
+                warnings: configWarnings
+            },
+            policies: {
+                loanDuration: config.loanDuration,
+                latePenalty: config.latePenalty,
+                maintenanceMode: config.maintenanceMode
+            },
+            health
+        });
+
+    } catch (err) {
+        console.error("Snapshots Error:", err);
+        res.status(500).json(err);
+    }
+});
+
+
 module.exports = router;
