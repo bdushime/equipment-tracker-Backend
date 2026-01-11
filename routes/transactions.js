@@ -1,12 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const Transaction = require('../models/Transaction');
-const { verifyToken } = require('../middleware/verifyToken');
-const { checkRole } = require('../middleware/checkRole'); 
-
 const Equipment = require('../models/Equipment');
 const User = require('../models/User');
-const AuditLog = require('../models/AuditLog'); 
+const AuditLog = require('../models/AuditLog');
+const Config = require('../models/Config'); // Import Config model for dynamic settings 
+
+const { verifyToken } = require('../middleware/verifyToken');
+const { checkRole } = require('../middleware/checkRole'); 
 
 const MAX_LOAN_HOURS = 24; 
 
@@ -116,7 +117,7 @@ router.post('/checkout', verifyToken, async (req, res) => {
 });
 
 // ==========================================
-// 4. Return Item (Check-in)
+// 4. Return Item (Check-in) - UPDATED WITH DYNAMIC CONFIG
 // ==========================================
 router.post('/checkin', verifyToken, async (req, res) => {
     try {
@@ -133,23 +134,41 @@ router.post('/checkin', verifyToken, async (req, res) => {
             return res.status(404).json({ message: "No active transaction found for this item/user combo." });
         }
 
+        // --- FETCH DYNAMIC CONFIG ---
+        let config = await Config.findOne();
+        if (!config) config = new Config(); // Fallback to defaults if not set
+
         transaction.returnTime = Date.now();
         transaction.status = 'Returned'; 
         transaction.condition = condition || "Good"; 
         
-        const isLate = new Date() > new Date(transaction.expectedReturnTime);
+        // Calculate Lateness
+        const now = new Date();
+        const dueDate = new Date(transaction.expectedReturnTime);
+        const isLate = now > dueDate;
+
         await transaction.save();
 
+        // Update Equipment Status
         const equipment = await Equipment.findById(equipmentId);
         equipment.status = 'Available';
         equipment.condition = condition || equipment.condition; 
         await equipment.save();
 
+        // Update User Score
         const user = await User.findById(targetUserId);
+        
         if (isLate) {
-            user.responsibilityScore -= 10; 
+            // Use DYNAMIC penalty from Config
+            // Calculate days late (min 1)
+            const diffTime = Math.abs(now - dueDate);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+            
+            const penalty = diffDays * config.latePenalty; // Dynamic calculation
+            user.responsibilityScore -= penalty;
         } else {
-            user.responsibilityScore += 5;  
+            // Optional: Bonus for on-time return (Could also be in Config)
+            user.responsibilityScore += 2;  
             if (user.responsibilityScore > 100) user.responsibilityScore = 100;
         }
         await user.save();
@@ -308,10 +327,8 @@ router.post('/cancel/:id', verifyToken, async (req, res) => {
 });
 
 // ==========================================
-// 9. GET ALL HISTORY (For IT Staff Reportss)
+// 9. GET ALL HISTORY (For IT Staff Reports)
 // ==========================================
-// This is the ONE AND ONLY route for reports. 
-// Do NOT add another one.
 router.get('/all-history', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), async (req, res) => {
     try {
         const transactions = await Transaction.find()
@@ -356,12 +373,11 @@ router.get('/security/dashboard-stats', verifyToken, async (req, res) => {
             { $sort: { "_id": 1 } }
         ]);
 
-        // Format for Recharts (Map month numbers 1-12 to "Jan", "Feb"...)
         const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
         const trendData = rawTrend.map(item => ({
             name: monthNames[item._id - 1],
             checkouts: item.checkouts,
-            failed: item.overdue // Using 'failed' to represent overdue/alerts in the chart
+            failed: item.overdue 
         }));
 
         // 3. Get Equipment Category Stats (For Pie Chart)
@@ -380,7 +396,7 @@ router.get('/security/dashboard-stats', verifyToken, async (req, res) => {
         const formattedEqStats = equipmentStats.map(item => ({
             name: item._id || "Uncategorized",
             value: item.value,
-            color: "#" + Math.floor(Math.random()*16777215).toString(16) // Random color for now
+            color: "#" + Math.floor(Math.random()*16777215).toString(16) 
         }));
 
         res.status(200).json({
@@ -401,16 +417,11 @@ router.get('/security/dashboard-stats', verifyToken, async (req, res) => {
 // ==========================================
 router.get('/security/access-logs', verifyToken, checkRole(['Security', 'Admin', 'IT_Staff']), async (req, res) => {
     try {
-        // 1. Fetch High-Level Stats
         const totalBorrowed = await Transaction.countDocuments({ status: 'Checked Out' });
         const totalOverdue = await Transaction.countDocuments({ status: 'Overdue' });
-        
-        // Count from Equipment table for physical status
         const totalLost = await Equipment.countDocuments({ status: 'Lost' });
         const totalDamaged = await Equipment.countDocuments({ status: 'Damaged' });
 
-        // 2. Fetch Recent Logs (Transactions)
-        // We fetch the last 100 events for the log table
         const logs = await Transaction.find()
             .populate('user', 'username email role')
             .populate('equipment', 'name serialNumber category')
@@ -418,12 +429,7 @@ router.get('/security/access-logs', verifyToken, checkRole(['Security', 'Admin',
             .limit(100);
 
         res.status(200).json({
-            stats: {
-                totalBorrowed,
-                totalOverdue,
-                totalLost,
-                totalDamaged
-            },
+            stats: { totalBorrowed, totalOverdue, totalLost, totalDamaged },
             logs
         });
 
@@ -439,19 +445,16 @@ router.get('/security/access-logs', verifyToken, checkRole(['Security', 'Admin',
 // ==========================================
 router.get('/admin/dashboard-stats', verifyToken, checkRole(['Admin']), async (req, res) => {
     try {
-        // 1. User Stats
         const totalUsers = await User.countDocuments();
         const activeUsers = await Transaction.distinct('user', { status: 'Checked Out' });
+        const lowScoreUsers = await User.countDocuments({ responsibilityScore: { $lt: 50 } }); // Count 'bad' users
         
-        // 2. Equipment Stats
         const totalEquipment = await Equipment.countDocuments();
         const availableEquipment = await Equipment.countDocuments({ status: 'Available' });
         const atRiskItems = await Transaction.countDocuments({ status: 'Overdue' });
 
-        // 3. System Health (Mock for now, or check DB connection)
         const systemStatus = "Online";
 
-        // 4. Recent Activity (Last 5 transactions)
         const recentActivity = await Transaction.find()
             .populate('user', 'username email')
             .populate('equipment', 'name')
@@ -465,6 +468,7 @@ router.get('/admin/dashboard-stats', verifyToken, checkRole(['Admin']), async (r
                 totalEquipment,
                 availableEquipment,
                 atRiskItems,
+                lowScoreUsers, // <--- ADDED THIS
                 systemStatus
             },
             recentActivity
