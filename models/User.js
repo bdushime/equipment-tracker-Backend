@@ -18,37 +18,39 @@ const UserSchema = new mongoose.Schema({
     },
     role: {
         type: String,
-        enum: ['Student', 'Admin', 'Security', 'IT_Staff','Security'],
+        // Removed duplicate 'Security'
+        enum: ['Student', 'Admin', 'Security', 'IT_Staff'], 
         default: 'Student'
     },
     studentId: {
         type: String,
     },
     fullName: { type: String },
+    // 👇 NEW: Added Department for Admin Panel
+    department: { 
+        type: String, 
+        default: 'General' 
+    }, 
     phone: { type: String },
     responsibilityScore: {
         type: Number,
         default: 100
     },
     lastLogin: {
-        type: Date
+        type: Date,
+        default: Date.now // 👇 NEW: Added default
     }
 }, { timestamps: true });
 
-// --- THE FIX IS HERE ---
-// Notice: We removed 'next' from the function arguments: async function()
 UserSchema.pre('save', async function() { 
-
-    // If password is not modified, we just return (exit the function)
+    // If password is not modified, return
     if (!this.isModified('password')) {
         return; 
     }
 
-    // Generate saalt and hash
+    // Generate salt and hash
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
-    
-    
 });
 
 module.exports = mongoose.model('User', UserSchema);
