@@ -31,6 +31,7 @@ app.use('/api/analytics', analyticsRoute);
 app.use('/api/security', securityRoute);
 app.use('/api/charts', chartsRoute);
 app.use('/api/reports', require('./routes/reports'));
+app.use('/api/data', require('./routes/data'));
 
 
 const connectDB = async () => {
