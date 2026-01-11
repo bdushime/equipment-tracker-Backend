@@ -434,4 +434,47 @@ router.get('/security/access-logs', verifyToken, checkRole(['Security', 'Admin',
 });
 
 
+// ==========================================
+// 13. GET ADMIN DASHBOARD STATS
+// ==========================================
+router.get('/admin/dashboard-stats', verifyToken, checkRole(['Admin']), async (req, res) => {
+    try {
+        // 1. User Stats
+        const totalUsers = await User.countDocuments();
+        const activeUsers = await Transaction.distinct('user', { status: 'Checked Out' });
+        
+        // 2. Equipment Stats
+        const totalEquipment = await Equipment.countDocuments();
+        const availableEquipment = await Equipment.countDocuments({ status: 'Available' });
+        const atRiskItems = await Transaction.countDocuments({ status: 'Overdue' });
+
+        // 3. System Health (Mock for now, or check DB connection)
+        const systemStatus = "Online";
+
+        // 4. Recent Activity (Last 5 transactions)
+        const recentActivity = await Transaction.find()
+            .populate('user', 'username email')
+            .populate('equipment', 'name')
+            .sort({ createdAt: -1 })
+            .limit(5);
+
+        res.status(200).json({
+            stats: {
+                activeBorrowed: activeUsers.length,
+                totalUsers,
+                totalEquipment,
+                availableEquipment,
+                atRiskItems,
+                systemStatus
+            },
+            recentActivity
+        });
+
+    } catch (err) {
+        console.error("Admin Dashboard Error:", err);
+        res.status(500).json(err);
+    }
+});
+
+
 module.exports = router;
