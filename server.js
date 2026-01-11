@@ -12,6 +12,7 @@ const startOverdueCheck = require('./utils/overdueCheck');
 const ticketRoute = require('./models/Ticket');
 const analyticsRoute = require('./routes/analytics');
 const securityRoute = require('./routes/security');
+const chartsRoute = require('./routes/charts');
 
 
 const app = express();
@@ -28,7 +29,7 @@ app.use('/api/gate', require('./routes/gate'));
 app.use('/api/tickets', ticketRoute);
 app.use('/api/analytics', analyticsRoute);
 app.use('/api/security', securityRoute);
-
+app.use('/api/charts', chartsRoute);
 
 
 const connectDB = async () => {
