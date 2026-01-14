@@ -17,7 +17,8 @@ const MAX_LOAN_HOURS = 24;
 router.get('/active', verifyToken, async (req, res) => {
     try {
         const transactions = await Transaction.find({ 
-            status: { $in: ['Pending', 'Checked Out', 'Overdue', 'Borrowed'] } 
+            // 👇 ADDED 'Reserved' TO THIS LIST
+            status: { $in: ['Pending', 'Checked Out', 'Overdue', 'Borrowed', 'Reserved'] } 
         })
         .populate('equipment', 'name serialNumber') 
         .populate('user', 'username email responsibilityScore')
