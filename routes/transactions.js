@@ -486,7 +486,7 @@ router.get('/admin/dashboard-stats', verifyToken, checkRole(['Admin']), async (r
 // ==========================================
 router.get('/admin/snapshots', verifyToken, checkRole(['Admin']), async (req, res) => {
     try {
-        // 1. Attention Indicatorss
+        // 1. Attention Indicators
         const maintenanceCount = await Equipment.countDocuments({ status: { $in: ['Maintenance', 'Damaged'] } });
         
         // 2. Active Policies (From Config)
