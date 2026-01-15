@@ -483,7 +483,7 @@ router.get('/admin/dashboard-stats', verifyToken, checkRole(['Admin']), async (r
 
 
 // ==========================================
-// 14. GET SYSTEM SNAPSHOTS (Widgetss)
+// 14. GET SYSTEM SNAPSHOTS (Widgets)
 // ==========================================
 router.get('/admin/snapshots', verifyToken, checkRole(['Admin']), async (req, res) => {
     try {
