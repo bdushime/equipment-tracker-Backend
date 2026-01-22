@@ -13,6 +13,7 @@ const ticketRoute = require('./models/Ticket');
 const analyticsRoute = require('./routes/analytics');
 const securityRoute = require('./routes/security');
 const chartsRoute = require('./routes/charts');
+const notificationRoute = require('./routes/notifications');
 
 
 const app = express();
@@ -34,6 +35,7 @@ app.use('/api/reports', require('./routes/reports'));
 app.use('/api/data', require('./routes/data'));
 app.use('/api/monitoring', require('./routes/monitoring'));
 app.use('/api/config', require('./routes/config'));
+app.use('/api/notifications', notificationRoute);
 
 
 const connectDB = async () => {
