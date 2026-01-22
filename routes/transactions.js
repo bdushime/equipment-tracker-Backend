@@ -52,7 +52,7 @@ router.get('/my-borrowed', verifyToken, async (req, res) => {
 });
 
 // ==========================================
-// 3. Borrow Item (Checkout / Request) -- UPDATED
+// 3. Borrow Item (Checkout / Request)
 // ==========================================
 router.post('/checkout', verifyToken, async (req, res) => {
     try {
@@ -126,7 +126,7 @@ router.post('/checkout', verifyToken, async (req, res) => {
         } else {
             // STUDENT REQUEST FLOW
             
-            // 1. Notify the Student
+            // 1. Notify the Student (Receipt)
             await sendNotification(
                 user._id,
                 user.email,
@@ -136,7 +136,7 @@ router.post('/checkout', verifyToken, async (req, res) => {
                 savedTransaction._id
             );
 
-            // 2. 👇 NEW: Notify ALL IT Staff & Admins
+            // 2. 👇 NEW: Notify ALL IT Staff & Admins (Alert)
             const staffMembers = await User.find({ role: { $in: ['IT', 'IT_Staff', 'Admin'] } });
             
             for (const staff of staffMembers) {
@@ -145,7 +145,7 @@ router.post('/checkout', verifyToken, async (req, res) => {
                     staff.email, 
                     "New Borrow Request",
                     `${user.username} has requested the ${equipment.name}. Please review in Dashboard.`,
-                    "warning", // Shows as Orange/High priority
+                    "warning", // Shows as Orange/High priority on dashboard
                     savedTransaction._id
                 );
             }
@@ -444,7 +444,7 @@ router.post('/cancel/:id', verifyToken, async (req, res) => {
 });
 
 // ==========================================
-// 9. GET ALL HISTORY (For Reports)
+// 9. GET ALL HISTORY (For IT Staff Reports)
 // ==========================================
 router.get('/all-history', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), async (req, res) => {
     try {
