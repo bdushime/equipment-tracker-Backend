@@ -52,7 +52,7 @@ router.get('/my-borrowed', verifyToken, async (req, res) => {
 });
 
 // ==========================================
-// 3. Borrow Item (Checkout / Request)
+// 3. Borrow Item (Checkout / Request) -- WITH DEBUGGING
 // ==========================================
 router.post('/checkout', verifyToken, async (req, res) => {
     try {
@@ -60,23 +60,13 @@ router.post('/checkout', verifyToken, async (req, res) => {
         const isStudent = req.user.role === 'Student';
         const targetUserId = isStudent ? req.user.id : (userId || req.user.id);
 
+        console.log(`[DEBUG] Checkout initiated by: ${req.user.username} (${req.user.role})`);
+
         // Security Check: Score
         const user = await User.findById(targetUserId);
         if (user.responsibilityScore < 60) {
-            // 🔔 NOTIFY USER OF BAN
-            await sendNotification(
-                user._id, 
-                user.email, 
-                "Checkout Denied", 
-                "Your borrowing privileges are suspended due to a low Responsibility Score (<60).", 
-                "error"
-            );
-
-            await AuditLog.create({
-                action: "CHECKOUT_DENIED",
-                user: targetUserId,
-                details: `Denied due to low score: ${user.responsibilityScore}`
-            });
+            await sendNotification(user._id, user.email, "Checkout Denied", "Your borrowing privileges are suspended due to a low Responsibility Score (<60).", "error");
+            await AuditLog.create({ action: "CHECKOUT_DENIED", user: targetUserId, details: `Denied due to low score: ${user.responsibilityScore}` });
             return res.status(403).json({ message: "Security Alert: You are banned from borrowing due to low score." });
         }
 
@@ -126,7 +116,7 @@ router.post('/checkout', verifyToken, async (req, res) => {
         } else {
             // STUDENT REQUEST FLOW
             
-            // 1. Notify the Student (Receipt)
+            // 1. Notify the Student
             await sendNotification(
                 user._id,
                 user.email,
@@ -136,16 +126,27 @@ router.post('/checkout', verifyToken, async (req, res) => {
                 savedTransaction._id
             );
 
-            // 2. 👇 NEW: Notify ALL IT Staff & Admins (Alert)
+            // 2. DEBUG & NOTIFY IT STAFF
+            console.log("[DEBUG] Searching for IT Staff to notify...");
+            
+            // Query strictly for these roles
             const staffMembers = await User.find({ role: { $in: ['IT', 'IT_Staff', 'Admin'] } });
             
+            console.log(`[DEBUG] Found ${staffMembers.length} staff members in DB.`);
+
+            if (staffMembers.length === 0) {
+                console.error("[CRITICAL WARNING] No IT Staff found! Notifications will not be sent to staff.");
+                console.error("Please check that users in MongoDB have roles: 'IT', 'IT_Staff', or 'Admin'");
+            }
+
             for (const staff of staffMembers) {
+                console.log(`[DEBUG] Sending alert to: ${staff.username} (${staff.email})`);
                 await sendNotification(
                     staff._id,
                     staff.email, 
                     "New Borrow Request",
                     `${user.username} has requested the ${equipment.name}. Please review in Dashboard.`,
-                    "warning", // Shows as Orange/High priority on dashboard
+                    "warning",
                     savedTransaction._id
                 );
             }
@@ -160,7 +161,7 @@ router.post('/checkout', verifyToken, async (req, res) => {
         res.status(201).json(savedTransaction);
 
     } catch (err) {
-        console.error(err);
+        console.error("[ERROR] Checkout Failed:", err);
         res.status(500).json(err);
     }
 });
@@ -444,7 +445,7 @@ router.post('/cancel/:id', verifyToken, async (req, res) => {
 });
 
 // ==========================================
-// 9. GET ALL HISTORY (For IT Staff Reports)
+// 9. GET ALL HISTORY (For Reports)
 // ==========================================
 router.get('/all-history', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), async (req, res) => {
     try {
