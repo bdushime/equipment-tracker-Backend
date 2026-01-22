@@ -52,7 +52,7 @@ router.get('/my-borrowed', verifyToken, async (req, res) => {
 });
 
 // ==========================================
-// 3. Borrow Item (Checkout / Request)
+// 3. Borrow Item (Checkout / Request) -- UPDATED
 // ==========================================
 router.post('/checkout', verifyToken, async (req, res) => {
     try {
@@ -110,6 +110,7 @@ router.post('/checkout', verifyToken, async (req, res) => {
         const savedTransaction = await newTransaction.save();
 
         if (!isStudent) {
+            // STAFF MANUAL CHECKOUT
             equipment.status = 'Checked Out';
             await equipment.save();
 
@@ -123,7 +124,9 @@ router.post('/checkout', verifyToken, async (req, res) => {
                 savedTransaction._id
             );
         } else {
-            // 🔔 NOTIFY USER (Request Submitted)
+            // STUDENT REQUEST FLOW
+            
+            // 1. Notify the Student
             await sendNotification(
                 user._id,
                 user.email,
@@ -132,6 +135,20 @@ router.post('/checkout', verifyToken, async (req, res) => {
                 "info",
                 savedTransaction._id
             );
+
+            // 2. 👇 NEW: Notify ALL IT Staff & Admins
+            const staffMembers = await User.find({ role: { $in: ['IT', 'IT_Staff', 'Admin'] } });
+            
+            for (const staff of staffMembers) {
+                await sendNotification(
+                    staff._id,
+                    staff.email, 
+                    "New Borrow Request",
+                    `${user.username} has requested the ${equipment.name}. Please review in Dashboard.`,
+                    "warning", // Shows as Orange/High priority
+                    savedTransaction._id
+                );
+            }
         }
 
         await AuditLog.create({
