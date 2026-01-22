@@ -494,7 +494,7 @@ router.get('/admin/snapshots', verifyToken, checkRole(['Admin']), async (req, re
         let config = await Config.findOne();
         if (!config) config = new Config(); // Default if missing
 
-        // Logic: If maintenance mode is ON, it's a warning
+        // Logic: If maintenance mode is ON, it's a warningg
         const configWarnings = config.maintenanceMode ? 1 : 0;
 
         // 3. System Health (Simulated for MERN app)
