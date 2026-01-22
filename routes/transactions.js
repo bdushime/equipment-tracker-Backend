@@ -4,7 +4,10 @@ const Transaction = require('../models/Transaction');
 const Equipment = require('../models/Equipment');
 const User = require('../models/User');
 const AuditLog = require('../models/AuditLog');
-const Config = require('../models/Config'); // Import Config model for dynamic settings 
+const Config = require('../models/Config'); 
+
+// 👇 IMPORT THE NOTIFICATION SERVICE
+const { sendNotification } = require('../utils/emailService');
 
 const { verifyToken } = require('../middleware/verifyToken');
 const { checkRole } = require('../middleware/checkRole'); 
@@ -17,7 +20,6 @@ const MAX_LOAN_HOURS = 24;
 router.get('/active', verifyToken, async (req, res) => {
     try {
         const transactions = await Transaction.find({ 
-            // 👇 ADDED 'Reserved' TO THIS LIST
             status: { $in: ['Pending', 'Checked Out', 'Overdue', 'Borrowed', 'Reserved'] } 
         })
         .populate('equipment', 'name serialNumber') 
@@ -61,6 +63,15 @@ router.post('/checkout', verifyToken, async (req, res) => {
         // Security Check: Score
         const user = await User.findById(targetUserId);
         if (user.responsibilityScore < 60) {
+            // 🔔 NOTIFY USER OF BAN
+            await sendNotification(
+                user._id, 
+                user.email, 
+                "Checkout Denied", 
+                "Your borrowing privileges are suspended due to a low Responsibility Score (<60).", 
+                "error"
+            );
+
             await AuditLog.create({
                 action: "CHECKOUT_DENIED",
                 user: targetUserId,
@@ -101,7 +112,27 @@ router.post('/checkout', verifyToken, async (req, res) => {
         if (!isStudent) {
             equipment.status = 'Checked Out';
             await equipment.save();
-        } 
+
+            // 🔔 NOTIFY USER (Direct Checkout by Staff)
+            await sendNotification(
+                user._id,
+                user.email,
+                "Equipment Checked Out",
+                `You have borrowed: ${equipment.name}. Please return it by ${new Date(expectedReturnTime).toLocaleString()}.`,
+                "success",
+                savedTransaction._id
+            );
+        } else {
+            // 🔔 NOTIFY USER (Request Submitted)
+            await sendNotification(
+                user._id,
+                user.email,
+                "Request Submitted",
+                `Your request to borrow ${equipment.name} is now PENDING approval from IT Staff.`,
+                "info",
+                savedTransaction._id
+            );
+        }
 
         await AuditLog.create({
             action: isStudent ? "REQUEST_CREATED" : "CHECKOUT_SUCCESS",
@@ -118,7 +149,7 @@ router.post('/checkout', verifyToken, async (req, res) => {
 });
 
 // ==========================================
-// 4. Return Item (Check-in) - UPDATED WITH DYNAMIC CONFIG
+// 4. Return Item (Check-in)
 // ==========================================
 router.post('/checkin', verifyToken, async (req, res) => {
     try {
@@ -137,7 +168,7 @@ router.post('/checkin', verifyToken, async (req, res) => {
 
         // --- FETCH DYNAMIC CONFIG ---
         let config = await Config.findOne();
-        if (!config) config = new Config(); // Fallback to defaults if not set
+        if (!config) config = new Config(); 
 
         transaction.returnTime = Date.now();
         transaction.status = 'Returned'; 
@@ -150,7 +181,6 @@ router.post('/checkin', verifyToken, async (req, res) => {
 
         await transaction.save();
 
-        // Update Equipment Status
         const equipment = await Equipment.findById(equipmentId);
         equipment.status = 'Available';
         equipment.condition = condition || equipment.condition; 
@@ -160,17 +190,35 @@ router.post('/checkin', verifyToken, async (req, res) => {
         const user = await User.findById(targetUserId);
         
         if (isLate) {
-            // Use DYNAMIC penalty from Config
-            // Calculate days late (min 1)
             const diffTime = Math.abs(now - dueDate);
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
             
-            const penalty = diffDays * config.latePenalty; // Dynamic calculation
+            const penalty = diffDays * config.latePenalty; 
             user.responsibilityScore -= penalty;
+
+            // 🔔 NOTIFY USER (Late Return)
+            await sendNotification(
+                user._id,
+                user.email,
+                "Late Return Penalty",
+                `You returned ${equipment.name} late. A penalty of -${penalty} points has been applied to your score.`,
+                "warning",
+                transaction._id
+            );
+
         } else {
-            // Optional: Bonus for on-time return (Could also be in Config)
             user.responsibilityScore += 2;  
             if (user.responsibilityScore > 100) user.responsibilityScore = 100;
+
+            // 🔔 NOTIFY USER (Success Return)
+            await sendNotification(
+                user._id,
+                user.email,
+                "Equipment Returned",
+                `You have successfully returned ${equipment.name}. Thank you!`,
+                "success",
+                transaction._id
+            );
         }
         await user.save();
 
@@ -248,6 +296,20 @@ router.post('/reserve', verifyToken, async (req, res) => {
         });
 
         await newReservation.save();
+
+        // 🔔 NOTIFY USER (Reservation Confirmed)
+        const user = await User.findById(req.user.id);
+        const equipment = await Equipment.findById(equipmentId);
+
+        await sendNotification(
+            user._id,
+            user.email,
+            "Reservation Confirmed",
+            `You have reserved ${equipment.name} for ${startTime.toLocaleString()}. Please arrive on time.`,
+            "success",
+            newReservation._id
+        );
+
         res.status(201).json({ message: "Reservation confirmed!", reservation: newReservation });
 
     } catch (err) {
@@ -262,7 +324,8 @@ router.post('/reserve', verifyToken, async (req, res) => {
 router.put('/:id/respond', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), async (req, res) => {
     try {
         const { action } = req.body; 
-        const transaction = await Transaction.findById(req.params.id);
+        // 👇 POPULATE USER TO GET EMAIL
+        const transaction = await Transaction.findById(req.params.id).populate('user').populate('equipment');
 
         if (!transaction) return res.status(404).json("Transaction not found");
 
@@ -270,25 +333,47 @@ router.put('/:id/respond', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), 
             const now = new Date();
             const requestTime = new Date(transaction.createdAt);
             const originalDue = new Date(transaction.expectedReturnTime);
-            const durationInMillis = originalDue - requestTime;
+            
+            let durationInMillis = originalDue - requestTime;
+            if (durationInMillis < 0) durationInMillis = 2 * 60 * 60 * 1000; 
 
             transaction.checkoutTime = now; 
             transaction.expectedReturnTime = new Date(now.getTime() + durationInMillis);
             transaction.status = 'Checked Out';
 
-            const equipment = await Equipment.findById(transaction.equipment);
+            const equipment = await Equipment.findById(transaction.equipment._id);
             if (equipment) {
                 equipment.status = 'Checked Out';
                 await equipment.save();
             }
+
+            // 🔔 NOTIFY USER (Approved)
+            await sendNotification(
+                transaction.user._id,
+                transaction.user.email,
+                "Request Approved",
+                `Your request for ${transaction.equipment.name} has been APPROVED. You may pick it up now.`,
+                "success",
+                transaction._id
+            );
             
         } else if (action === 'Deny') {
             transaction.status = 'Denied';
-            const equipment = await Equipment.findById(transaction.equipment);
+            const equipment = await Equipment.findById(transaction.equipment._id);
             if(equipment && equipment.status !== 'Available') {
                  equipment.status = 'Available';
                  await equipment.save();
             }
+
+            // 🔔 NOTIFY USER (Denied)
+            await sendNotification(
+                transaction.user._id,
+                transaction.user.email,
+                "Request Denied",
+                `Your request for ${transaction.equipment.name} was DENIED by IT Staff.`,
+                "error",
+                transaction._id
+            );
         }
 
         await transaction.save();
@@ -305,12 +390,15 @@ router.put('/:id/respond', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), 
 router.post('/cancel/:id', verifyToken, async (req, res) => {
     try {
         const transactionId = req.params.id;
-        const transaction = await Transaction.findById(transactionId);
+        const transaction = await Transaction.findById(transactionId).populate('user').populate('equipment');
 
         if (!transaction) return res.status(404).json({ message: "Transaction not found." });
 
-        if (transaction.user.toString() !== req.user.id) {
-            return res.status(403).json({ message: "Unauthorized: You do not own this reservation." });
+        const isOwner = transaction.user._id.toString() === req.user.id;
+        const isStaff = ['IT', 'IT_Staff', 'Admin'].includes(req.user.role);
+
+        if (!isOwner && !isStaff) {
+            return res.status(403).json({ message: "Unauthorized." });
         }
 
         if (transaction.status !== 'Reserved') {
@@ -319,6 +407,17 @@ router.post('/cancel/:id', verifyToken, async (req, res) => {
 
         transaction.status = 'Cancelled';
         await transaction.save();
+
+        // 🔔 NOTIFY USER (Cancellation)
+        await sendNotification(
+            transaction.user._id,
+            transaction.user.email,
+            "Reservation Cancelled",
+            `Reservation for ${transaction.equipment.name} has been cancelled.`,
+            "warning",
+            transaction._id
+        );
+
         res.status(200).json({ message: "Reservation cancelled successfully." });
 
     } catch (err) {
@@ -328,7 +427,7 @@ router.post('/cancel/:id', verifyToken, async (req, res) => {
 });
 
 // ==========================================
-// 9. GET ALL HISTORY (For IT Staff Reports)
+// 9. GET ALL HISTORY (For Reports)
 // ==========================================
 router.get('/all-history', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), async (req, res) => {
     try {
@@ -344,17 +443,14 @@ router.get('/all-history', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), 
     }
 });
 
-
 // ==========================================
 // 11. GET SECURITY DASHBOARD STATS
 // ==========================================
 router.get('/security/dashboard-stats', verifyToken, async (req, res) => {
     try {
-        // 1. Get Headline Stats
         const activeCount = await Transaction.countDocuments({ status: 'Checked Out' });
         const overdueCount = await Transaction.countDocuments({ status: 'Overdue' });
         
-        // 2. Get Chart Data (Last 6 Months)
         const sixMonthsAgo = new Date();
         sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
@@ -381,7 +477,6 @@ router.get('/security/dashboard-stats', verifyToken, async (req, res) => {
             failed: item.overdue 
         }));
 
-        // 3. Get Equipment Category Stats (For Pie Chart)
         const equipmentStats = await Transaction.aggregate([
             { $lookup: { from: 'equipment', localField: 'equipment', foreignField: '_id', as: 'eq' } },
             { $unwind: "$eq" },
@@ -391,7 +486,7 @@ router.get('/security/dashboard-stats', verifyToken, async (req, res) => {
                     value: { $sum: 1 }
                 }
             },
-            { $limit: 4 } // Top 4 categories
+            { $limit: 4 }
         ]);
 
         const formattedEqStats = equipmentStats.map(item => ({
@@ -440,7 +535,6 @@ router.get('/security/access-logs', verifyToken, checkRole(['Security', 'Admin',
     }
 });
 
-
 // ==========================================
 // 13. GET ADMIN DASHBOARD STATS
 // ==========================================
@@ -448,7 +542,7 @@ router.get('/admin/dashboard-stats', verifyToken, checkRole(['Admin']), async (r
     try {
         const totalUsers = await User.countDocuments();
         const activeUsers = await Transaction.distinct('user', { status: 'Checked Out' });
-        const lowScoreUsers = await User.countDocuments({ responsibilityScore: { $lt: 50 } }); // Count 'bad' users
+        const lowScoreUsers = await User.countDocuments({ responsibilityScore: { $lt: 50 } }); 
         
         const totalEquipment = await Equipment.countDocuments();
         const availableEquipment = await Equipment.countDocuments({ status: 'Available' });
@@ -469,7 +563,7 @@ router.get('/admin/dashboard-stats', verifyToken, checkRole(['Admin']), async (r
                 totalEquipment,
                 availableEquipment,
                 atRiskItems,
-                lowScoreUsers, // <--- ADDED THIS
+                lowScoreUsers,
                 systemStatus
             },
             recentActivity
@@ -481,32 +575,27 @@ router.get('/admin/dashboard-stats', verifyToken, checkRole(['Admin']), async (r
     }
 });
 
-
 // ==========================================
 // 14. GET SYSTEM SNAPSHOTS (Widgets)
 // ==========================================
 router.get('/admin/snapshots', verifyToken, checkRole(['Admin']), async (req, res) => {
     try {
-        // 1. Attention Indicators
         const maintenanceCount = await Equipment.countDocuments({ status: { $in: ['Maintenance', 'Damaged'] } });
         
-        // 2. Active Policies (From Config)
         let config = await Config.findOne();
-        if (!config) config = new Config(); // Default if missing
+        if (!config) config = new Config(); 
 
-        // Logic: If maintenance mode is ON, it's a warningg
         const configWarnings = config.maintenanceMode ? 1 : 0;
 
-        // 3. System Health (Simulated for MERN app)
         const health = {
             uptime: "99.98%",
-            storage: "45%", // In a real app, use 'diskusage' package
-            lastBackup: new Date(Date.now() - 1000 * 60 * 120) // Mock: 2 hours ago
+            storage: "45%", 
+            lastBackup: new Date(Date.now() - 1000 * 60 * 120) 
         };
 
         res.status(200).json({
             attention: {
-                sensors: 0, // Mock: No real IOT sensors yet
+                sensors: 0, 
                 maintenance: maintenanceCount,
                 warnings: configWarnings
             },
@@ -523,6 +612,5 @@ router.get('/admin/snapshots', verifyToken, checkRole(['Admin']), async (req, re
         res.status(500).json(err);
     }
 });
-
 
 module.exports = router;
