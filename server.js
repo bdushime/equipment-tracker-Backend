@@ -14,6 +14,7 @@ const analyticsRoute = require('./routes/analytics');
 const securityRoute = require('./routes/security');
 const chartsRoute = require('./routes/charts');
 const notificationRoute = require('./routes/notifications');
+const iotRoute = require('./routes/iot');
 
 
 const app = express();
