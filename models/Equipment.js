@@ -6,7 +6,7 @@ const equipmentSchema = new mongoose.Schema({
       required: true 
   }, 
   
-  // Added Description Field ✅
+  // Existing Description Field
   description: {
       type: String,
       default: ""
@@ -15,7 +15,6 @@ const equipmentSchema = new mongoose.Schema({
   type: { 
       type: String, 
       required: true,
-      // Note: If you want to allow 'Tablet', 'Audio', 'Accessories', add them here!
       enum: ['Laptop', 'Projector', 'Camera', 'Microphone', 'Tablet', 'Audio', 'Accessories', 'Other'] 
   }, 
   
@@ -31,7 +30,7 @@ const equipmentSchema = new mongoose.Schema({
       enum: ['Available', 'Checked Out', 'Maintenance', 'Lost']
   },
 
-  // Added Location Field ✅
+  // Existing Location Field
   location: {
       type: String,
       default: "Main Storage"
@@ -41,6 +40,26 @@ const equipmentSchema = new mongoose.Schema({
       type: String,
       default: 'Good'
   },
+
+  // =========================================================
+  // 👇 NEW IOT TRACKING FIELDS (Added for ESP8266 Integration)
+  // =========================================================
+  iotTag: { 
+      type: String, 
+      unique: true, 
+      sparse: true // Allows this field to be empty (null) for items without trackers
+  },
+  
+  trackingStatus: { 
+      type: String, 
+      enum: ['Safe', 'Lost', 'Unknown'], 
+      default: 'Unknown' 
+  },
+  
+  lastSeen: { 
+      type: Date, 
+      default: null 
+  }
   
 }, { timestamps: true }); 
 
