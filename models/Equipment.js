@@ -6,7 +6,6 @@ const equipmentSchema = new mongoose.Schema({
       required: true 
   }, 
   
-  // Existing Description Field
   description: {
       type: String,
       default: ""
@@ -15,7 +14,7 @@ const equipmentSchema = new mongoose.Schema({
   type: { 
       type: String, 
       required: true,
-      enum: ['Laptop', 'Projector', 'Camera', 'Microphone', 'Tablet', 'Audio', 'Accessories', 'Other'] 
+      enum: ['Laptop', 'Projector', 'Camera', 'Microphone', 'Tablet', 'Audio', 'Accessories', 'Electronics', 'Other'] 
   }, 
   
   serialNumber: { 
@@ -30,9 +29,9 @@ const equipmentSchema = new mongoose.Schema({
       enum: ['Available', 'Checked Out', 'Maintenance', 'Lost']
   },
 
-  // Existing Location Field
   location: {
-      type: String,
+      // Allow flexible string storage (e.g. "Cabinet A") OR coordinates
+      type: mongoose.Schema.Types.Mixed, 
       default: "Main Storage"
   },
 
@@ -42,12 +41,12 @@ const equipmentSchema = new mongoose.Schema({
   },
 
   // =========================================================
-  // 👇 NEW IOT TRACKING FIELDS (Added for ESP8266 Integration)
+  // 👇 IOT TRACKING FIELDS (Updated for Simulation)
   // =========================================================
   iotTag: { 
       type: String, 
       unique: true, 
-      sparse: true // Allows this field to be empty (null) for items without trackers
+      sparse: true 
   },
   
   trackingStatus: { 
@@ -56,9 +55,22 @@ const equipmentSchema = new mongoose.Schema({
       default: 'Unknown' 
   },
   
+  // Necessary for "Online/Offline" check
   lastSeen: { 
       type: Date, 
       default: null 
+  },
+
+  // Necessary for Battery display
+  batteryLevel: {
+      type: Number,
+      default: 100
+  },
+
+  // Necessary for Map display
+  geoCoordinates: {
+      lat: { type: Number },
+      lng: { type: Number }
   }
   
 }, { timestamps: true }); 
