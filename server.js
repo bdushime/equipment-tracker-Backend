@@ -37,6 +37,7 @@ app.use('/api/data', require('./routes/data'));
 app.use('/api/monitoring', require('./routes/monitoring'));
 app.use('/api/config', require('./routes/config'));
 app.use('/api/notifications', notificationRoute);
+app.use('/api/iot', iotRoute);
 
 
 const connectDB = async () => {
