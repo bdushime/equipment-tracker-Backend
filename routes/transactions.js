@@ -4,25 +4,25 @@ const Transaction = require('../models/Transaction');
 const Equipment = require('../models/Equipment');
 const User = require('../models/User');
 const AuditLog = require('../models/AuditLog');
-const Config = require('../models/Config'); 
+const Config = require('../models/Config');
 
 // 👇 IMPORT THE NOTIFICATION SERVICE
 const { sendNotification } = require('../utils/emailService');
 
 const { verifyToken } = require('../middleware/verifyToken');
-const { checkRole } = require('../middleware/checkRole'); 
+const { checkRole } = require('../middleware/checkRole');
 
-const MAX_LOAN_HOURS = 24; 
+const MAX_LOAN_HOURS = 24;
 
 // ==========================================
 // 1. Get Active Loans & Requests (For IT Staff)
 // ==========================================
 router.get('/active', verifyToken, async (req, res) => {
     try {
-        const transactions = await Transaction.find({ 
-            status: { $in: ['Pending', 'Checked Out', 'Overdue', 'Borrowed', 'Reserved'] } 
+        const transactions = await Transaction.find({
+            status: { $in: ['Pending', 'Checked Out', 'Overdue', 'Borrowed', 'Reserved'] }
         })
-        .populate('equipment', 'name serialNumber') 
+        .populate('equipment', 'name serialNumber')
         .populate('user', 'username email responsibilityScore')
         .sort({ createdAt: -1 });
 
@@ -38,12 +38,12 @@ router.get('/active', verifyToken, async (req, res) => {
 // ==========================================
 router.get('/my-borrowed', verifyToken, async (req, res) => {
     try {
-        const activeTransactions = await Transaction.find({ 
-            user: req.user.id,      
-            returnTime: null        
+        const activeTransactions = await Transaction.find({
+            user: req.user.id,
+            returnTime: null
         })
-        .populate('equipment')      
-        .sort({ expectedReturnTime: 1 }); 
+        .populate('equipment')
+        .sort({ expectedReturnTime: 1 });
 
         res.status(200).json(activeTransactions);
     } catch (err) {
@@ -52,7 +52,7 @@ router.get('/my-borrowed', verifyToken, async (req, res) => {
 });
 
 // ==========================================
-// 3. Borrow Item (Checkout / Request) -- WITH DEBUGGING
+// 3. Borrow Item (Checkout / Request) -- NON-BLOCKING EMAIL
 // ==========================================
 router.post('/checkout', verifyToken, async (req, res) => {
     try {
@@ -60,20 +60,26 @@ router.post('/checkout', verifyToken, async (req, res) => {
         const isStudent = req.user.role === 'Student';
         const targetUserId = isStudent ? req.user.id : (userId || req.user.id);
 
-        console.log(`[DEBUG] Checkout initiated by: ${req.user.username} (${req.user.role})`);
+        console.log(`[DEBUG] Checkout initiated by: ${req.user.username}`);
 
         // Security Check: Score
         const user = await User.findById(targetUserId);
         if (user.responsibilityScore < 60) {
-            await sendNotification(user._id, user.email, "Checkout Denied", "Your borrowing privileges are suspended due to a low Responsibility Score (<60).", "error");
-            await AuditLog.create({ action: "CHECKOUT_DENIED", user: targetUserId, details: `Denied due to low score: ${user.responsibilityScore}` });
+            // Background Email
+            sendNotification(user._id, user.email, "Checkout Denied", "Low Score.", "error").catch(console.error);
+            
+            await AuditLog.create({
+                action: "CHECKOUT_DENIED",
+                user: targetUserId,
+                details: `Denied due to low score: ${user.responsibilityScore}`
+            });
             return res.status(403).json({ message: "Security Alert: You are banned from borrowing due to low score." });
         }
 
         // Policy Check: Duration
         const returnDate = new Date(expectedReturnTime);
         const now = new Date();
-        const hoursDifference = Math.abs(returnDate - now) / 36e5; 
+        const hoursDifference = Math.abs(returnDate - now) / 36e5;
 
         if (hoursDifference > MAX_LOAN_HOURS) {
             return res.status(400).json({ message: `Security Policy: You cannot borrow items for more than ${MAX_LOAN_HOURS} hours.` });
@@ -93,7 +99,7 @@ router.post('/checkout', verifyToken, async (req, res) => {
             expectedReturnTime: expectedReturnTime,
             destination: destination,
             purpose: purpose,
-            checkoutPhotoUrl: req.body.checkoutPhotoUrl || "", 
+            checkoutPhotoUrl: req.body.checkoutPhotoUrl || "",
             signatureUrl: req.body.signatureUrl || "",
             status: initialStatus
         });
@@ -104,52 +110,38 @@ router.post('/checkout', verifyToken, async (req, res) => {
             equipment.status = 'Checked Out';
             await equipment.save();
 
-            // 🔔 NOTIFY USER (Direct Checkout by Staff)
-            await sendNotification(
-                user._id,
-                user.email,
-                "Equipment Checked Out",
-                `You have borrowed: ${equipment.name}. Please return it by ${new Date(expectedReturnTime).toLocaleString()}.`,
-                "success",
-                savedTransaction._id
-            );
+            // Background Email (Don't await)
+            sendNotification(user._id, user.email, "Equipment Checked Out", `You have borrowed: ${equipment.name}.`, "success", savedTransaction._id).catch(console.error);
         } else {
             // STUDENT REQUEST FLOW
             
-            // 1. Notify the Student
-            await sendNotification(
+            // 1. Notify the Student (Background)
+            sendNotification(
                 user._id,
                 user.email,
                 "Request Submitted",
                 `Your request to borrow ${equipment.name} is now PENDING approval from IT Staff.`,
                 "info",
                 savedTransaction._id
-            );
+            ).catch(console.error);
 
-            // 2. DEBUG & NOTIFY IT STAFF
-            console.log("[DEBUG] Searching for IT Staff to notify...");
-            
-            // Query strictly for these roles
-            const staffMembers = await User.find({ role: { $in: ['IT', 'IT_Staff', 'Admin'] } });
-            
-            console.log(`[DEBUG] Found ${staffMembers.length} staff members in DB.`);
-
-            if (staffMembers.length === 0) {
-                console.error("[CRITICAL WARNING] No IT Staff found! Notifications will not be sent to staff.");
-                console.error("Please check that users in MongoDB have roles: 'IT', 'IT_Staff', or 'Admin'");
-            }
-
-            for (const staff of staffMembers) {
-                console.log(`[DEBUG] Sending alert to: ${staff.username} (${staff.email})`);
-                await sendNotification(
-                    staff._id,
-                    staff.email, 
-                    "New Borrow Request",
-                    `${user.username} has requested the ${equipment.name}. Please review in Dashboard.`,
-                    "warning",
-                    savedTransaction._id
-                );
-            }
+            // 2. Notify IT Staff (Background Search & Send)
+            User.find({ role: { $regex: /IT|Admin|Staff/i } }).then(staffMembers => {
+                console.log(`[DEBUG] Background Task: Found ${staffMembers.length} staff to notify.`);
+                staffMembers.forEach(staff => {
+                    // Don't notify the student if they happen to be staff
+                    if (staff._id.toString() !== user._id.toString()) {
+                        sendNotification(
+                            staff._id,
+                            staff.email,
+                            "New Borrow Request",
+                            `${user.username} has requested the ${equipment.name}.`,
+                            "warning",
+                            savedTransaction._id
+                        ).catch(console.error);
+                    }
+                });
+            }).catch(console.error);
         }
 
         await AuditLog.create({
@@ -158,16 +150,17 @@ router.post('/checkout', verifyToken, async (req, res) => {
             details: `${isStudent ? 'Requested' : 'Borrowed'} ${equipment.name}`
         });
 
+        // Respond IMMEDIATELY so UI doesn't hang
         res.status(201).json(savedTransaction);
 
     } catch (err) {
-        console.error("[ERROR] Checkout Failed:", err);
+        console.error(err);
         res.status(500).json(err);
     }
 });
 
 // ==========================================
-// 4. Return Item (Check-in)
+// 4. Return Item (Check-in) -- DEBUGGED
 // ==========================================
 router.post('/checkin', verifyToken, async (req, res) => {
     try {
@@ -177,31 +170,38 @@ router.post('/checkin', verifyToken, async (req, res) => {
         const transaction = await Transaction.findOne({
             user: targetUserId,
             equipment: equipmentId,
-            returnTime: null 
+            returnTime: null
         });
 
         if (!transaction) {
             return res.status(404).json({ message: "No active transaction found for this item/user combo." });
         }
 
-        // --- FETCH DYNAMIC CONFIG ---
+        // --- FETCH DYNAMIC CONFIG WITH FALLBACK ---
         let config = await Config.findOne();
-        if (!config) config = new Config(); 
+        if (!config) config = new Config();
+        const LATE_PENALTY = config.latePenalty || 5; // Default to 5 if config is missing
 
         transaction.returnTime = Date.now();
-        transaction.status = 'Returned'; 
-        transaction.condition = condition || "Good"; 
-        
+        transaction.status = 'Returned';
+        transaction.condition = condition || "Good";
+
         // Calculate Lateness
         const now = new Date();
         const dueDate = new Date(transaction.expectedReturnTime);
         const isLate = now > dueDate;
 
+        // DEBUGGING LOGS
+        console.log("--- RETURN DEBUG ---");
+        console.log("Now:", now);
+        console.log("Due:", dueDate);
+        console.log("Is Late:", isLate);
+
         await transaction.save();
 
         const equipment = await Equipment.findById(equipmentId);
         equipment.status = 'Available';
-        equipment.condition = condition || equipment.condition; 
+        equipment.condition = condition || equipment.condition;
         await equipment.save();
 
         // Update User Score
@@ -209,34 +209,38 @@ router.post('/checkin', verifyToken, async (req, res) => {
         
         if (isLate) {
             const diffTime = Math.abs(now - dueDate);
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); // Round UP so 1 hour late = 1 day penalty
             
-            const penalty = diffDays * config.latePenalty; 
+            const penalty = diffDays * LATE_PENALTY;
             user.responsibilityScore -= penalty;
 
-            // 🔔 NOTIFY USER (Late Return)
-            await sendNotification(
+            console.log(`Late by ${diffDays} days. Penalty: -${penalty}`);
+
+            // Background Email
+            sendNotification(
                 user._id,
                 user.email,
                 "Late Return Penalty",
-                `You returned ${equipment.name} late. A penalty of -${penalty} points has been applied to your score.`,
+                `You returned ${equipment.name} late (${diffDays} days). A penalty of -${penalty} points has been applied.`,
                 "warning",
                 transaction._id
-            );
+            ).catch(console.error);
 
         } else {
-            user.responsibilityScore += 2;  
+            user.responsibilityScore += 2;
             if (user.responsibilityScore > 100) user.responsibilityScore = 100;
 
-            // 🔔 NOTIFY USER (Success Return)
-            await sendNotification(
+            console.log("Returned On Time. Score +2");
+
+            // Background Email
+            sendNotification(
                 user._id,
                 user.email,
                 "Equipment Returned",
                 `You have successfully returned ${equipment.name}. Thank you!`,
                 "success",
                 transaction._id
-            );
+            ).catch(console.error);
         }
         await user.save();
 
@@ -257,12 +261,12 @@ router.post('/checkin', verifyToken, async (req, res) => {
 // ==========================================
 router.get('/my-history', verifyToken, async (req, res) => {
     try {
-        const history = await Transaction.find({ 
-            user: req.user.id 
+        const history = await Transaction.find({
+            user: req.user.id
         })
         .populate('equipment')
-        .sort({ updatedAt: -1 }) 
-        .limit(10); 
+        .sort({ updatedAt: -1 })
+        .limit(10);
 
         res.status(200).json(history);
     } catch (err) {
@@ -283,7 +287,7 @@ router.post('/reserve', verifyToken, async (req, res) => {
             return res.status(400).json({ message: "Invalid date or time format." });
         }
 
-        const endTime = new Date(startTime.getTime() + 2 * 60 * 60 * 1000); 
+        const endTime = new Date(startTime.getTime() + 2 * 60 * 60 * 1000);
 
         if (startTime < new Date()) {
             return res.status(400).json({ message: "Cannot reserve for a past date/time." });
@@ -310,23 +314,23 @@ router.post('/reserve', verifyToken, async (req, res) => {
             expectedReturnTime: endTime,
             destination: `${location} (${course})`,
             purpose: purpose,
-            status: 'Reserved' 
+            status: 'Reserved'
         });
 
         await newReservation.save();
 
-        // 🔔 NOTIFY USER (Reservation Confirmed)
         const user = await User.findById(req.user.id);
         const equipment = await Equipment.findById(equipmentId);
 
-        await sendNotification(
+        // Background Email
+        sendNotification(
             user._id,
             user.email,
             "Reservation Confirmed",
-            `You have reserved ${equipment.name} for ${startTime.toLocaleString()}. Please arrive on time.`,
+            `You have reserved ${equipment.name} for ${startTime.toLocaleString()}.`,
             "success",
             newReservation._id
-        );
+        ).catch(console.error);
 
         res.status(201).json({ message: "Reservation confirmed!", reservation: newReservation });
 
@@ -337,12 +341,11 @@ router.post('/reserve', verifyToken, async (req, res) => {
 });
 
 // ==========================================
-// 7. Handle Approve / Deny Request
+// 7. Handle Approve / Deny Request -- NON-BLOCKING
 // ==========================================
 router.put('/:id/respond', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), async (req, res) => {
     try {
-        const { action } = req.body; 
-        // 👇 POPULATE USER TO GET EMAIL
+        const { action } = req.body;
         const transaction = await Transaction.findById(req.params.id).populate('user').populate('equipment');
 
         if (!transaction) return res.status(404).json("Transaction not found");
@@ -353,9 +356,9 @@ router.put('/:id/respond', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), 
             const originalDue = new Date(transaction.expectedReturnTime);
             
             let durationInMillis = originalDue - requestTime;
-            if (durationInMillis < 0) durationInMillis = 2 * 60 * 60 * 1000; 
+            if (durationInMillis < 0) durationInMillis = 2 * 60 * 60 * 1000;
 
-            transaction.checkoutTime = now; 
+            transaction.checkoutTime = now;
             transaction.expectedReturnTime = new Date(now.getTime() + durationInMillis);
             transaction.status = 'Checked Out';
 
@@ -365,15 +368,15 @@ router.put('/:id/respond', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), 
                 await equipment.save();
             }
 
-            // 🔔 NOTIFY USER (Approved)
-            await sendNotification(
+            // Background Email
+            sendNotification(
                 transaction.user._id,
                 transaction.user.email,
                 "Request Approved",
-                `Your request for ${transaction.equipment.name} has been APPROVED. You may pick it up now.`,
+                `Your request for ${transaction.equipment.name} has been APPROVED.`,
                 "success",
                 transaction._id
-            );
+            ).catch(console.error);
             
         } else if (action === 'Deny') {
             transaction.status = 'Denied';
@@ -383,15 +386,15 @@ router.put('/:id/respond', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), 
                  await equipment.save();
             }
 
-            // 🔔 NOTIFY USER (Denied)
-            await sendNotification(
+            // Background Email
+            sendNotification(
                 transaction.user._id,
                 transaction.user.email,
                 "Request Denied",
-                `Your request for ${transaction.equipment.name} was DENIED by IT Staff.`,
+                `Your request for ${transaction.equipment.name} was DENIED.`,
                 "error",
                 transaction._id
-            );
+            ).catch(console.error);
         }
 
         await transaction.save();
@@ -403,7 +406,7 @@ router.put('/:id/respond', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), 
 });
 
 // ==========================================
-// 8. Cancel Reservation
+// 8. Cancel Reservation -- NON-BLOCKING
 // ==========================================
 router.post('/cancel/:id', verifyToken, async (req, res) => {
     try {
@@ -426,15 +429,15 @@ router.post('/cancel/:id', verifyToken, async (req, res) => {
         transaction.status = 'Cancelled';
         await transaction.save();
 
-        // 🔔 NOTIFY USER (Cancellation)
-        await sendNotification(
+        // Background Email
+        sendNotification(
             transaction.user._id,
             transaction.user.email,
             "Reservation Cancelled",
             `Reservation for ${transaction.equipment.name} has been cancelled.`,
             "warning",
             transaction._id
-        );
+        ).catch(console.error);
 
         res.status(200).json({ message: "Reservation cancelled successfully." });
 
@@ -450,8 +453,8 @@ router.post('/cancel/:id', verifyToken, async (req, res) => {
 router.get('/all-history', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), async (req, res) => {
     try {
         const transactions = await Transaction.find()
-            .populate('user', 'username email responsibilityScore') 
-            .populate('equipment', 'name serialNumber category status') 
+            .populate('user', 'username email responsibilityScore')
+            .populate('equipment', 'name serialNumber category status')
             .sort({ createdAt: -1 });
 
         res.status(200).json(transactions);
@@ -461,174 +464,66 @@ router.get('/all-history', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), 
     }
 });
 
-// ==========================================
-// 11. GET SECURITY DASHBOARD STATS
-// ==========================================
+// ... (Routes 11, 12, 13, 14 kept same as before - they are read-only and fine) ...
+// 11. Security Dashboard
 router.get('/security/dashboard-stats', verifyToken, async (req, res) => {
     try {
         const activeCount = await Transaction.countDocuments({ status: 'Checked Out' });
         const overdueCount = await Transaction.countDocuments({ status: 'Overdue' });
-        
-        const sixMonthsAgo = new Date();
-        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-
+        const sixMonthsAgo = new Date(); sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
         const rawTrend = await Transaction.aggregate([
             { $match: { createdAt: { $gte: sixMonthsAgo } } },
-            {
-                $group: {
-                    _id: { $month: "$createdAt" },
-                    checkouts: { 
-                        $sum: { $cond: [{ $in: ["$status", ["Checked Out", "Returned", "Overdue"]] }, 1, 0] } 
-                    },
-                    overdue: { 
-                        $sum: { $cond: [{ $eq: ["$status", "Overdue"] }, 1, 0] } 
-                    }
-                }
-            },
+            { $group: { _id: { $month: "$createdAt" }, checkouts: { $sum: { $cond: [{ $in: ["$status", ["Checked Out", "Returned", "Overdue"]] }, 1, 0] } }, overdue: { $sum: { $cond: [{ $eq: ["$status", "Overdue"] }, 1, 0] } } } },
             { $sort: { "_id": 1 } }
         ]);
-
         const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-        const trendData = rawTrend.map(item => ({
-            name: monthNames[item._id - 1],
-            checkouts: item.checkouts,
-            failed: item.overdue 
-        }));
-
+        const trendData = rawTrend.map(item => ({ name: monthNames[item._id - 1], checkouts: item.checkouts, failed: item.overdue }));
         const equipmentStats = await Transaction.aggregate([
             { $lookup: { from: 'equipment', localField: 'equipment', foreignField: '_id', as: 'eq' } },
             { $unwind: "$eq" },
-            {
-                $group: {
-                    _id: "$eq.category",
-                    value: { $sum: 1 }
-                }
-            },
+            { $group: { _id: "$eq.category", value: { $sum: 1 } } },
             { $limit: 4 }
         ]);
-
-        const formattedEqStats = equipmentStats.map(item => ({
-            name: item._id || "Uncategorized",
-            value: item.value,
-            color: "#" + Math.floor(Math.random()*16777215).toString(16) 
-        }));
-
-        res.status(200).json({
-            activeCount,
-            overdueCount,
-            trendData,
-            equipmentTypeData: formattedEqStats
-        });
-
-    } catch (err) {
-        console.error("Dashboard Stats Error:", err);
-        res.status(500).json(err);
-    }
+        const formattedEqStats = equipmentStats.map(item => ({ name: item._id || "Uncategorized", value: item.value, color: "#" + Math.floor(Math.random()*16777215).toString(16) }));
+        res.status(200).json({ activeCount, overdueCount, trendData, equipmentTypeData: formattedEqStats });
+    } catch (err) { res.status(500).json(err); }
 });
 
-// ==========================================
-// 12. GET SECURITY ACCESS LOGS & STATS
-// ==========================================
+// 12. Security Logs
 router.get('/security/access-logs', verifyToken, checkRole(['Security', 'Admin', 'IT_Staff']), async (req, res) => {
     try {
         const totalBorrowed = await Transaction.countDocuments({ status: 'Checked Out' });
         const totalOverdue = await Transaction.countDocuments({ status: 'Overdue' });
         const totalLost = await Equipment.countDocuments({ status: 'Lost' });
         const totalDamaged = await Equipment.countDocuments({ status: 'Damaged' });
-
-        const logs = await Transaction.find()
-            .populate('user', 'username email role')
-            .populate('equipment', 'name serialNumber category')
-            .sort({ createdAt: -1 })
-            .limit(100);
-
-        res.status(200).json({
-            stats: { totalBorrowed, totalOverdue, totalLost, totalDamaged },
-            logs
-        });
-
-    } catch (err) {
-        console.error("Access Logs Error:", err);
-        res.status(500).json(err);
-    }
+        const logs = await Transaction.find().populate('user', 'username email role').populate('equipment', 'name serialNumber category').sort({ createdAt: -1 }).limit(100);
+        res.status(200).json({ stats: { totalBorrowed, totalOverdue, totalLost, totalDamaged }, logs });
+    } catch (err) { res.status(500).json(err); }
 });
 
-// ==========================================
-// 13. GET ADMIN DASHBOARD STATS
-// ==========================================
+// 13. Admin Dashboard
 router.get('/admin/dashboard-stats', verifyToken, checkRole(['Admin']), async (req, res) => {
     try {
         const totalUsers = await User.countDocuments();
         const activeUsers = await Transaction.distinct('user', { status: 'Checked Out' });
-        const lowScoreUsers = await User.countDocuments({ responsibilityScore: { $lt: 50 } }); 
-        
+        const lowScoreUsers = await User.countDocuments({ responsibilityScore: { $lt: 50 } });
         const totalEquipment = await Equipment.countDocuments();
         const availableEquipment = await Equipment.countDocuments({ status: 'Available' });
         const atRiskItems = await Transaction.countDocuments({ status: 'Overdue' });
-
-        const systemStatus = "Online";
-
-        const recentActivity = await Transaction.find()
-            .populate('user', 'username email')
-            .populate('equipment', 'name')
-            .sort({ createdAt: -1 })
-            .limit(5);
-
-        res.status(200).json({
-            stats: {
-                activeBorrowed: activeUsers.length,
-                totalUsers,
-                totalEquipment,
-                availableEquipment,
-                atRiskItems,
-                lowScoreUsers,
-                systemStatus
-            },
-            recentActivity
-        });
-
-    } catch (err) {
-        console.error("Admin Dashboard Error:", err);
-        res.status(500).json(err);
-    }
+        const recentActivity = await Transaction.find().populate('user', 'username email').populate('equipment', 'name').sort({ createdAt: -1 }).limit(5);
+        res.status(200).json({ stats: { activeBorrowed: activeUsers.length, totalUsers, totalEquipment, availableEquipment, atRiskItems, lowScoreUsers, systemStatus: "Online" }, recentActivity });
+    } catch (err) { res.status(500).json(err); }
 });
 
-// ==========================================
-// 14. GET SYSTEM SNAPSHOTS (Widgets)
-// ==========================================
+// 14. Snapshots
 router.get('/admin/snapshots', verifyToken, checkRole(['Admin']), async (req, res) => {
     try {
         const maintenanceCount = await Equipment.countDocuments({ status: { $in: ['Maintenance', 'Damaged'] } });
-        
-        let config = await Config.findOne();
-        if (!config) config = new Config(); 
-
+        let config = await Config.findOne(); if (!config) config = new Config();
         const configWarnings = config.maintenanceMode ? 1 : 0;
-
-        const health = {
-            uptime: "99.98%",
-            storage: "45%", 
-            lastBackup: new Date(Date.now() - 1000 * 60 * 120) 
-        };
-
-        res.status(200).json({
-            attention: {
-                sensors: 0, 
-                maintenance: maintenanceCount,
-                warnings: configWarnings
-            },
-            policies: {
-                loanDuration: config.loanDuration,
-                latePenalty: config.latePenalty,
-                maintenanceMode: config.maintenanceMode
-            },
-            health
-        });
-
-    } catch (err) {
-        console.error("Snapshots Error:", err);
-        res.status(500).json(err);
-    }
+        const health = { uptime: "99.98%", storage: "45%", lastBackup: new Date(Date.now() - 1000 * 60 * 120) };
+        res.status(200).json({ attention: { sensors: 0, maintenance: maintenanceCount, warnings: configWarnings }, policies: { loanDuration: config.loanDuration, latePenalty: config.latePenalty, maintenanceMode: config.maintenanceMode }, health });
+    } catch (err) { res.status(500).json(err); }
 });
 
 module.exports = router;
