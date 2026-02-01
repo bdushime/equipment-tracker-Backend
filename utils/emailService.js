@@ -1,12 +1,18 @@
 const nodemailer = require('nodemailer');
 const Notification = require('../models/Notification');
 
-// 1. Configure the Transporter (The Postman)
+// 1. Configure the Transporter (Explicit SMTP Settings)
 const transporter = nodemailer.createTransport({
-    service: 'gmail', // Or your SMTP provider
+    host: 'smtp.gmail.com', // Force Google's SMTP host
+    port: 465,              // Force Secure SSL Port
+    secure: true,           // Use SSL (True for 465)
     auth: {
-        user: process.env.EMAIL_USER, // Add this to your .env
-        pass: process.env.EMAIL_PASS  // Add this to your .env (App Password, not login password)
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS // MUST be an App Password
+    },
+    // Fix for some cloud environments blocking self-signed certs
+    tls: {
+        rejectUnauthorized: false
     }
 });
 
@@ -14,6 +20,7 @@ const transporter = nodemailer.createTransport({
 const sendNotification = async (userId, userEmail, title, message, type = 'info', relatedId = null) => {
     try {
         // A. Save to Database (In-App Notification)
+        // We await this so the DB record is always safe
         await Notification.create({
             recipient: userId,
             title,
@@ -22,31 +29,38 @@ const sendNotification = async (userId, userEmail, title, message, type = 'info'
             relatedId
         });
 
-        // B. Send Email
-        const mailOptions = {
-            from: `"Tracknity System" <${process.env.EMAIL_USER}>`,
-            to: userEmail,
-            subject: `Tracknity Alert: ${title}`,
-            html: `
-                <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
-                    <h2 style="color: #0b1d3a;">${title}</h2>
-                    <p style="font-size: 16px; color: #333;">${message}</p>
-                    <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
-                    <p style="font-size: 12px; color: #777;">This is an automated message from the Tracknity Equipment System.</p>
-                </div>
-            `
-        };
+        // B. Send Email (Fire and Forget - Don't crash if email fails)
+        if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+            
+            const mailOptions = {
+                from: `"Tracknity System" <${process.env.EMAIL_USER}>`,
+                to: userEmail,
+                subject: `Tracknity Alert: ${title}`,
+                html: `
+                    <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+                        <h2 style="color: #0b1d3a;">${title}</h2>
+                        <p style="font-size: 16px; color: #333;">${message}</p>
+                        <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+                        <p style="font-size: 12px; color: #777;">This is an automated message from the Tracknity Equipment System.</p>
+                    </div>
+                `
+            };
 
-        if (process.env.EMAIL_USER) {
-            await transporter.sendMail(mailOptions);
-            console.log(`📧 Email sent to ${userEmail}`);
+            // Attempt to send
+            transporter.sendMail(mailOptions, (err, info) => {
+                if (err) {
+                    console.error("❌ Email Failed (Background):", err.message);
+                } else {
+                    console.log(`📧 Email sent to ${userEmail}`);
+                }
+            });
+
         } else {
-            console.warn("⚠️ Email skipped: No EMAIL_USER in .env");
+            console.warn("⚠️ Email skipped: No EMAIL_USER/PASS in .env");
         }
 
     } catch (error) {
         console.error("Notification Error:", error);
-        // We don't throw error here to prevent blocking the main transaction flow
     }
 };
 
