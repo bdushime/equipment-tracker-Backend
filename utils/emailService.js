@@ -1,26 +1,24 @@
 const nodemailer = require('nodemailer');
 const Notification = require('../models/Notification');
 
-// 1. Configure the Transporter (Explicit SMTP Settings)
+// 1. Configure the Transporter (Try Port 587 for Cloud Servers)
 const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com', // Force Google's SMTP host
-    port: 465,              // Force Secure SSL Port
-    secure: true,           // Use SSL (True for 465)
+    host: 'smtp.gmail.com', 
+    port: 587,              // 👈 CHANGE: Standard STARTTLS port
+    secure: false,          // 👈 CHANGE: Must be false for port 587
     auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS // MUST be an App Password
+        pass: process.env.EMAIL_PASS // Must be your 16-char App Password
     },
-    // Fix for some cloud environments blocking self-signed certs
     tls: {
-        rejectUnauthorized: false
+        rejectUnauthorized: false // Helps avoid certificate errors on some clouds
     }
 });
 
 // 2. The Main Function to Send & Save
 const sendNotification = async (userId, userEmail, title, message, type = 'info', relatedId = null) => {
     try {
-        // A. Save to Database (In-App Notification)
-        // We await this so the DB record is always safe
+        // A. Save to Database
         await Notification.create({
             recipient: userId,
             title,
@@ -29,7 +27,7 @@ const sendNotification = async (userId, userEmail, title, message, type = 'info'
             relatedId
         });
 
-        // B. Send Email (Fire and Forget - Don't crash if email fails)
+        // B. Send Email
         if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
             
             const mailOptions = {
@@ -49,6 +47,7 @@ const sendNotification = async (userId, userEmail, title, message, type = 'info'
             // Attempt to send
             transporter.sendMail(mailOptions, (err, info) => {
                 if (err) {
+                    // Log the specific error to help us debug if 587 also fails
                     console.error("❌ Email Failed (Background):", err.message);
                 } else {
                     console.log(`📧 Email sent to ${userEmail}`);
