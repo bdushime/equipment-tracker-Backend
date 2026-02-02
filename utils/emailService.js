@@ -17,6 +17,14 @@ const transporter = nodemailer.createTransport({
 
 // 2. The Main Function to Send & Save
 const sendNotification = async (userId, userEmail, title, message, type = 'info', relatedId = null) => {
+
+
+    // Add this right inside the sendNotification function
+console.log("DEBUG AUTH CHECK:");
+console.log("User:", process.env.EMAIL_USER);
+console.log("Pass Length:", process.env.EMAIL_PASS ? process.env.EMAIL_PASS.length : "MISSING");
+console.log("First 3 chars of Key:", process.env.EMAIL_PASS ? process.env.EMAIL_PASS.substring(0, 3) : "N/A");
+
     try {
         // A. Save to Database
         await Notification.create({
