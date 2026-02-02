@@ -1,18 +1,17 @@
 const nodemailer = require('nodemailer');
 const Notification = require('../models/Notification');
 
-// 1. Configure the Transporter (Try Port 587 for Cloud Servers)
+// 1. Configure the Transporter (Force IPv4 on Port 587)
 const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com', 
-    port: 587,              // 👈 CHANGE: Standard STARTTLS port
-    secure: false,          // 👈 CHANGE: Must be false for port 587
+    service: 'gmail', 
+    // We use the 'service' shorthand here because it automatically handles 
+    // the correct host/port mapping for Gmail, but we MUST force authentication logic.
     auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS // Must be your 16-char App Password
+        pass: process.env.EMAIL_PASS 
     },
-    tls: {
-        rejectUnauthorized: false // Helps avoid certificate errors on some clouds
-    }
+    // 👇 THIS IS THE FIX FOR RENDER TIMEOUTS
+    family: 4, 
 });
 
 // 2. The Main Function to Send & Save
@@ -29,7 +28,6 @@ const sendNotification = async (userId, userEmail, title, message, type = 'info'
 
         // B. Send Email
         if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-            
             const mailOptions = {
                 from: `"Tracknity System" <${process.env.EMAIL_USER}>`,
                 to: userEmail,
@@ -44,11 +42,10 @@ const sendNotification = async (userId, userEmail, title, message, type = 'info'
                 `
             };
 
-            // Attempt to send
+            // Attempt to send with callback for logging
             transporter.sendMail(mailOptions, (err, info) => {
                 if (err) {
-                    // Log the specific error to help us debug if 587 also fails
-                    console.error("❌ Email Failed (Background):", err.message);
+                    console.error("❌ Email Failed:", err.message);
                 } else {
                     console.log(`📧 Email sent to ${userEmail}`);
                 }
