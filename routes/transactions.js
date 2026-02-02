@@ -341,11 +341,13 @@ router.post('/reserve', verifyToken, async (req, res) => {
 });
 
 // ==========================================
-// 7. Handle Approve / Deny Request -- NON-BLOCKING
+// 7. Handle Approve / Deny Request -- UPDATED FOR REASON
 // ==========================================
 router.put('/:id/respond', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), async (req, res) => {
     try {
-        const { action } = req.body;
+        // 👇 EXTRACT THE REASON
+        const { action, reason } = req.body;
+        
         const transaction = await Transaction.findById(req.params.id).populate('user').populate('equipment');
 
         if (!transaction) return res.status(404).json("Transaction not found");
@@ -386,12 +388,17 @@ router.put('/:id/respond', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), 
                  await equipment.save();
             }
 
-            // Background Email
+            // 👇 CONSTRUCT MESSAGE WITH REASON
+            const denialMessage = reason 
+                ? `Your request for ${transaction.equipment.name} was DENIED.\n\nReason: "${reason}"`
+                : `Your request for ${transaction.equipment.name} was DENIED.`;
+
+            // Background Email (With Reason)
             sendNotification(
                 transaction.user._id,
                 transaction.user.email,
                 "Request Denied",
-                `Your request for ${transaction.equipment.name} was DENIED.`,
+                denialMessage,
                 "error",
                 transaction._id
             ).catch(console.error);
