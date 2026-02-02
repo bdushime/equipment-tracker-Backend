@@ -1,17 +1,18 @@
 const nodemailer = require('nodemailer');
 const Notification = require('../models/Notification');
 
-// 1. Configure the Transporter (Force IPv4 on Port 587)
+// 1. Configure the Transporter (Brevo on Port 2525)
 const transporter = nodemailer.createTransport({
-    service: 'gmail', 
-    // We use the 'service' shorthand here because it automatically handles 
-    // the correct host/port mapping for Gmail, but we MUST force authentication logic.
+    host: 'smtp-relay.brevo.com', 
+    port: 2525,             // 👈 FORCE PORT 2525 (Bypasses Render Firewall)
+    secure: false,          // Must be false for 2525
     auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS 
+        user: process.env.EMAIL_USER, // Your Brevo Email
+        pass: process.env.EMAIL_PASS  // Your Brevo SMTP Key
     },
-    // 👇 THIS IS THE FIX FOR RENDER TIMEOUTS
-    family: 4, 
+    tls: {
+        rejectUnauthorized: false // Helps with cloud SSL handshakes
+    }
 });
 
 // 2. The Main Function to Send & Save
@@ -28,8 +29,9 @@ const sendNotification = async (userId, userEmail, title, message, type = 'info'
 
         // B. Send Email
         if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+            
             const mailOptions = {
-                from: `"Tracknity System" <${process.env.EMAIL_USER}>`,
+                from: `"Tracknity System" <${process.env.EMAIL_USER}>`, // Must match your Brevo verified sender
                 to: userEmail,
                 subject: `Tracknity Alert: ${title}`,
                 html: `
@@ -42,17 +44,17 @@ const sendNotification = async (userId, userEmail, title, message, type = 'info'
                 `
             };
 
-            // Attempt to send with callback for logging
+            // Attempt to send
             transporter.sendMail(mailOptions, (err, info) => {
                 if (err) {
                     console.error("❌ Email Failed:", err.message);
                 } else {
-                    console.log(`📧 Email sent to ${userEmail}`);
+                    console.log(`✅ Email sent to ${userEmail}`);
                 }
             });
 
         } else {
-            console.warn("⚠️ Email skipped: No EMAIL_USER/PASS in .env");
+            console.warn("⚠️ Email skipped: Credentials missing.");
         }
 
     } catch (error) {
