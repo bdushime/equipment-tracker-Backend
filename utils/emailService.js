@@ -1,32 +1,24 @@
 const nodemailer = require('nodemailer');
 const Notification = require('../models/Notification');
 
-// 1. Configure the Transporter (Brevo on Port 2525)
+// 1. Configure the Transporter (Brevo SMTP)
 const transporter = nodemailer.createTransport({
     host: 'smtp-relay.brevo.com', 
-    port: 2525,             // 👈 FORCE PORT 2525 (Bypasses Render Firewall)
-    secure: false,          // Must be false for 2525
+    port: 587,              // Standard SMTP Port
+    secure: false,          // False for TLS/STARTTLS
     auth: {
-        user: process.env.EMAIL_USER, // Your Brevo Email
-        pass: process.env.EMAIL_PASS  // Your Brevo SMTP Key
+        user: process.env.EMAIL_USER, // This reads 'a15375001@smtp-brevo.com' from Render
+        pass: process.env.EMAIL_PASS  // This reads your long 'xsmtpsib-...' Key
     },
     tls: {
-        rejectUnauthorized: false // Helps with cloud SSL handshakes
+        rejectUnauthorized: false // Helps prevent cloud SSL handshake errors
     }
 });
 
 // 2. The Main Function to Send & Save
 const sendNotification = async (userId, userEmail, title, message, type = 'info', relatedId = null) => {
-
-
-    // Add this right inside the sendNotification function
-console.log("DEBUG AUTH CHECK:");
-console.log("User:", process.env.EMAIL_USER);
-console.log("Pass Length:", process.env.EMAIL_PASS ? process.env.EMAIL_PASS.length : "MISSING");
-console.log("First 3 chars of Key:", process.env.EMAIL_PASS ? process.env.EMAIL_PASS.substring(0, 3) : "N/A");
-
     try {
-        // A. Save to Database
+        // A. Save to Database (Always happens)
         await Notification.create({
             recipient: userId,
             title,
@@ -39,7 +31,8 @@ console.log("First 3 chars of Key:", process.env.EMAIL_PASS ? process.env.EMAIL_
         if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
             
             const mailOptions = {
-                from: `"Tracknity System" <${process.env.EMAIL_USER}>`, // Must match your Brevo verified sender
+                // ✅ FIXED: We authenticate with Brevo ID, but send AS your Gmail.
+                from: `"Tracknity System" <bdushime47@gmail.com>`, 
                 to: userEmail,
                 subject: `Tracknity Alert: ${title}`,
                 html: `
