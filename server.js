@@ -56,7 +56,12 @@ app.get('/', (req, res) => {
 });
 
 
+const startIoTCheck = require('./utils/iotCheck'); // Import IoT Check
+
+// ...
+
 startOverdueCheck();
+startIoTCheck(); // Start IoT Monitoring
 
 
 const PORT = process.env.PORT || 5001;
