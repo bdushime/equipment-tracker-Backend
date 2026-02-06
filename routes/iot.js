@@ -19,7 +19,7 @@ const verifyIoTKey = (req, res, next) => {
 // ==========================================
 router.post('/update', verifyIoTKey, async (req, res) => {
     try {
-        const { tag, status, location } = req.body;
+        const { tag, status, location, lat, lng } = req.body;
 
         if (!tag || !status) {
             return res.status(400).json({ message: "Missing tag or status" });
@@ -37,9 +37,13 @@ router.post('/update', verifyIoTKey, async (req, res) => {
         equipment.lastSeen = Date.now();
 
         // 3. Check for Status Change
+        if (lat && lng) {
+            equipment.geoCoordinates = { lat, lng };
+        }
+
         if (equipment.trackingStatus !== status) {
             equipment.trackingStatus = status;
-            
+
             // If LOST, trigger the Alarm!
             if (status === 'LOST') {
                 console.log(`[IoT CRITICAL] ${equipment.name} is LOST at ${location}!`);
@@ -52,7 +56,7 @@ router.post('/update', verifyIoTKey, async (req, res) => {
 
                 // B. Notify IT Staff & Security
                 const staff = await User.find({ role: { $in: ['IT', 'IT_Staff', 'Admin', 'Security'] } });
-                
+
                 for (const user of staff) {
                     await sendNotification(
                         user._id,
@@ -65,7 +69,7 @@ router.post('/update', verifyIoTKey, async (req, res) => {
                 }
             }
         }
-        
+
         await equipment.save();
         res.status(200).json({ message: "Status updated" });
 

@@ -33,7 +33,7 @@ router.get('/browse', async (req, res) => {
         }
 
         if (category && category !== 'All Categories') {
-            query.type = category; 
+            query.type = category;
         }
 
         if (status) {
@@ -42,7 +42,18 @@ router.get('/browse', async (req, res) => {
         }
 
         const equipment = await Equipment.find(query).sort({ name: 1 });
-        res.status(200).json(equipment);
+
+        // Flatten coordinates here too
+        const response = equipment.map(item => {
+            const doc = item.toObject();
+            if (doc.geoCoordinates && doc.geoCoordinates.lat && doc.geoCoordinates.lng) {
+                doc.lat = doc.geoCoordinates.lat;
+                doc.lng = doc.geoCoordinates.lng;
+            }
+            return doc;
+        });
+
+        res.status(200).json(response);
 
     } catch (err) {
         console.error("Browse Error:", err);
@@ -56,7 +67,18 @@ router.get('/browse', async (req, res) => {
 router.get('/', async (req, res) => {
     try {
         const allEquipment = await Equipment.find();
-        res.status(200).json(allEquipment);
+
+        // Flatten coordinates for frontend compatibility
+        const response = allEquipment.map(item => {
+            const doc = item.toObject(); // Convert to plain object
+            if (doc.geoCoordinates && doc.geoCoordinates.lat && doc.geoCoordinates.lng) {
+                doc.lat = doc.geoCoordinates.lat;
+                doc.lng = doc.geoCoordinates.lng;
+            }
+            return doc;
+        });
+
+        res.status(200).json(response);
     } catch (err) {
         res.status(500).json(err);
     }
@@ -80,8 +102,8 @@ router.put('/:id', async (req, res) => {
 
         // 2. Attempt the update
         const updatedEquipment = await Equipment.findByIdAndUpdate(
-            req.params.id, 
-            { $set: req.body }, 
+            req.params.id,
+            { $set: req.body },
             { new: true, runValidators: true } // runValidators ensures data matches Schema rules
         );
 
