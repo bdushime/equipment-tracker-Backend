@@ -22,9 +22,9 @@ router.get('/active', verifyToken, async (req, res) => {
         const transactions = await Transaction.find({
             status: { $in: ['Pending', 'Checked Out', 'Overdue', 'Borrowed', 'Reserved'] }
         })
-        .populate('equipment', 'name serialNumber')
-        .populate('user', 'username email responsibilityScore')
-        .sort({ createdAt: -1 });
+            .populate('equipment', 'name serialNumber')
+            .populate('user', 'username email responsibilityScore')
+            .sort({ createdAt: -1 });
 
         res.status(200).json(transactions);
     } catch (err) {
@@ -42,8 +42,8 @@ router.get('/my-borrowed', verifyToken, async (req, res) => {
             user: req.user.id,
             returnTime: null
         })
-        .populate('equipment')
-        .sort({ expectedReturnTime: 1 });
+            .populate('equipment')
+            .sort({ expectedReturnTime: 1 });
 
         res.status(200).json(activeTransactions);
     } catch (err) {
@@ -67,7 +67,7 @@ router.post('/checkout', verifyToken, async (req, res) => {
         if (user.responsibilityScore < 60) {
             // Background Email
             sendNotification(user._id, user.email, "Checkout Denied", "Low Score.", "error").catch(console.error);
-            
+
             await AuditLog.create({
                 action: "CHECKOUT_DENIED",
                 user: targetUserId,
@@ -114,7 +114,7 @@ router.post('/checkout', verifyToken, async (req, res) => {
             sendNotification(user._id, user.email, "Equipment Checked Out", `You have borrowed: ${equipment.name}.`, "success", savedTransaction._id).catch(console.error);
         } else {
             // STUDENT REQUEST FLOW
-            
+
             // 1. Notify the Student (Background)
             sendNotification(
                 user._id,
@@ -206,11 +206,11 @@ router.post('/checkin', verifyToken, async (req, res) => {
 
         // Update User Score
         const user = await User.findById(targetUserId);
-        
+
         if (isLate) {
             const diffTime = Math.abs(now - dueDate);
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); // Round UP so 1 hour late = 1 day penalty
-            
+
             const penalty = diffDays * LATE_PENALTY;
             user.responsibilityScore -= penalty;
 
@@ -264,9 +264,9 @@ router.get('/my-history', verifyToken, async (req, res) => {
         const history = await Transaction.find({
             user: req.user.id
         })
-        .populate('equipment')
-        .sort({ updatedAt: -1 })
-        .limit(10);
+            .populate('equipment')
+            .sort({ updatedAt: -1 })
+            .limit(10);
 
         res.status(200).json(history);
     } catch (err) {
@@ -282,7 +282,7 @@ router.post('/reserve', verifyToken, async (req, res) => {
         const { equipmentId, reservationDate, reservationTime, purpose, location, course } = req.body;
         const startString = `${reservationDate}T${reservationTime}:00`;
         const startTime = new Date(startString);
-        
+
         if (isNaN(startTime.getTime())) {
             return res.status(400).json({ message: "Invalid date or time format." });
         }
@@ -347,7 +347,7 @@ router.put('/:id/respond', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), 
     try {
         // 👇 EXTRACT THE REASON
         const { action, reason } = req.body;
-        
+
         const transaction = await Transaction.findById(req.params.id).populate('user').populate('equipment');
 
         if (!transaction) return res.status(404).json("Transaction not found");
@@ -356,7 +356,7 @@ router.put('/:id/respond', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), 
             const now = new Date();
             const requestTime = new Date(transaction.createdAt);
             const originalDue = new Date(transaction.expectedReturnTime);
-            
+
             let durationInMillis = originalDue - requestTime;
             if (durationInMillis < 0) durationInMillis = 2 * 60 * 60 * 1000;
 
@@ -379,17 +379,17 @@ router.put('/:id/respond', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), 
                 "success",
                 transaction._id
             ).catch(console.error);
-            
+
         } else if (action === 'Deny') {
             transaction.status = 'Denied';
             const equipment = await Equipment.findById(transaction.equipment._id);
-            if(equipment && equipment.status !== 'Available') {
-                 equipment.status = 'Available';
-                 await equipment.save();
+            if (equipment && equipment.status !== 'Available') {
+                equipment.status = 'Available';
+                await equipment.save();
             }
 
             // 👇 CONSTRUCT MESSAGE WITH REASON
-            const denialMessage = reason 
+            const denialMessage = reason
                 ? `Your request for ${transaction.equipment.name} was DENIED.\n\nReason: "${reason}"`
                 : `Your request for ${transaction.equipment.name} was DENIED.`;
 
@@ -488,10 +488,10 @@ router.get('/security/dashboard-stats', verifyToken, async (req, res) => {
         const equipmentStats = await Transaction.aggregate([
             { $lookup: { from: 'equipment', localField: 'equipment', foreignField: '_id', as: 'eq' } },
             { $unwind: "$eq" },
-            { $group: { _id: "$eq.category", value: { $sum: 1 } } },
+            { $group: { _id: "$eq.type", value: { $sum: 1 } } },
             { $limit: 4 }
         ]);
-        const formattedEqStats = equipmentStats.map(item => ({ name: item._id || "Uncategorized", value: item.value, color: "#" + Math.floor(Math.random()*16777215).toString(16) }));
+        const formattedEqStats = equipmentStats.map(item => ({ name: item._id || "Uncategorized", value: item.value, color: "#" + Math.floor(Math.random() * 16777215).toString(16) }));
         res.status(200).json({ activeCount, overdueCount, trendData, equipmentTypeData: formattedEqStats });
     } catch (err) { res.status(500).json(err); }
 });
