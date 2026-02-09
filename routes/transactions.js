@@ -522,7 +522,7 @@ router.get('/admin/dashboard-stats', verifyToken, checkRole(['Admin']), async (r
     } catch (err) { res.status(500).json(err); }
 });
 
-// 14. Snapshots
+// 14. Snapshotss
 router.get('/admin/snapshots', verifyToken, checkRole(['Admin']), async (req, res) => {
     try {
         const maintenanceCount = await Equipment.countDocuments({ status: { $in: ['Maintenance', 'Damaged'] } });
