@@ -3,7 +3,25 @@ const Config = require('../models/Config');
 const { verifyToken } = require('../middleware/verifyToken');
 const { checkRole } = require('../middleware/checkRole');
 
-// GET CONFIG (Or create default if missing)
+// GET PROPERTIES/OPTIONS (For Dropdowns - Available to all logged in users)
+router.get('/options', verifyToken, async (req, res) => {
+    try {
+        let config = await Config.findOne();
+        if (!config) {
+            config = new Config();
+            await config.save();
+        }
+        res.status(200).json({
+            categories: config.equipmentCategories,
+            conditions: config.equipmentConditions,
+            statuses: config.equipmentStatuses
+        });
+    } catch (err) {
+        res.status(500).json(err);
+    }
+});
+
+// GET FULL CONFIG (For Admin Settings Page)
 router.get('/', verifyToken, checkRole(['Admin']), async (req, res) => {
     try {
         let config = await Config.findOne();
