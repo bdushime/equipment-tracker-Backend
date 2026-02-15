@@ -40,7 +40,7 @@ app.use('/api/notifications', notificationRoute);
 app.use('/api/iot', iotRoute);
 
 // 👇 2. REGISTER THE ROUTE URL
-app.use('/api/classrooms', classroomRoute);
+app.use('/api/transactions', classroomRoute);
 
 const connectDB = async () => {
     try {
