@@ -3,7 +3,6 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 
-
 const equipmentRoute = require('./routes/equipment');
 const authRoute = require('./routes/auth');
 const userRoute = require('./routes/users');
@@ -16,9 +15,10 @@ const chartsRoute = require('./routes/charts');
 const notificationRoute = require('./routes/notifications');
 const iotRoute = require('./routes/iot');
 
+// 👇 1. IMPORT THE NEW CLASSROOM ROUTE
+const classroomRoute = require('./routes/classroomRoutes'); 
 
 const app = express();
-
 
 app.use(express.json());
 app.use(cors());
@@ -39,6 +39,8 @@ app.use('/api/config', require('./routes/config'));
 app.use('/api/notifications', notificationRoute);
 app.use('/api/iot', iotRoute);
 
+// 👇 2. REGISTER THE ROUTE URL
+app.use('/api/classrooms', classroomRoute);
 
 const connectDB = async () => {
     try {
@@ -50,14 +52,11 @@ const connectDB = async () => {
     }
 };
 
-
 app.get('/', (req, res) => {
     res.send('Equipment Tracker API is running...');
 });
 
-
 startOverdueCheck();
-
 
 const PORT = process.env.PORT || 5001;
 connectDB().then(() => {
