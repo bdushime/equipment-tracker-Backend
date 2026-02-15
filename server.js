@@ -16,7 +16,7 @@ const notificationRoute = require('./routes/notifications');
 const iotRoute = require('./routes/iot');
 
 // 👇 1. IMPORT THE NEW CLASSROOM ROUTE
-const classroomRoute = require('./routes/classroom'); 
+const classroomRoute = require('./routes/classrooms'); 
 
 const app = express();
 
@@ -40,7 +40,7 @@ app.use('/api/notifications', notificationRoute);
 app.use('/api/iot', iotRoute);
 
 // 👇 2. REGISTER THE ROUTE URL
-app.use('/api/classroom', classroomRoute);
+app.use('/api/classrooms', classroomRoute);
 
 const connectDB = async () => {
     try {
