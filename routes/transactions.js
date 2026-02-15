@@ -5,7 +5,7 @@ const Equipment = require('../models/Equipment');
 const User = require('../models/User');
 const AuditLog = require('../models/AuditLog');
 const Config = require('../models/Config');
-// 👇 IMPORT CLASSROOM MODEL (New)
+// 👇 IMPORT CLASSROOM MODEL
 const Classroom = require('../models/Classroom');
 
 const { sendNotification } = require('../utils/emailService');
@@ -94,16 +94,15 @@ router.post('/checkout', verifyToken, async (req, res) => {
         let status = isStudent ? 'Pending' : 'Checked Out';
         let adminNote = "";
 
-        // 1. Is it a Projector? (Check name or category)
+        // 1. Is it a Projector?
         const isProjector = equipment.name.toLowerCase().includes('projector') || 
                             (equipment.category && equipment.category.toLowerCase().includes('projector'));
 
         if (isProjector) {
             // 2. Extract Room Name (e.g. from "Room 304 (CS101)" -> "Room 304")
-            // We assume the room name is the first part before any brackets
             const roomNameInput = destination ? destination.split('(')[0].trim() : "";
 
-            // 3. Find Classroom (Case-insensitive regex search)
+            // 3. Find Classroom (Regex for case-insensitive match)
             const classroom = await Classroom.findOne({ 
                 name: { $regex: new RegExp(`^${roomNameInput}$`, 'i') } 
             });
@@ -111,7 +110,6 @@ router.post('/checkout', verifyToken, async (req, res) => {
             // 4. If Room has a screen, Force Pending Status
             if (classroom && classroom.hasScreen) {
                 console.log(`[POLICY HIT] Projector requested for ${classroom.name} which has a screen.`);
-                
                 status = 'Pending'; // Force approval required
                 adminNote = " [SYSTEM FLAG: Projector requested in room with existing screen]";
             }
@@ -123,7 +121,7 @@ router.post('/checkout', verifyToken, async (req, res) => {
             equipment: equipmentId,
             expectedReturnTime: expectedReturnTime,
             destination: destination,
-            purpose: purpose + adminNote, // Append flag to purpose
+            purpose: purpose + adminNote,
             checkoutPhotoUrl: req.body.checkoutPhotoUrl || "",
             signatureUrl: req.body.signatureUrl || "",
             status: status
@@ -132,13 +130,12 @@ router.post('/checkout', verifyToken, async (req, res) => {
         const savedTransaction = await newTransaction.save();
 
         if (status === 'Checked Out') {
-            // STAFF MANUAL CHECKOUT (Immediate)
+            // STAFF MANUAL CHECKOUT
             equipment.status = 'Checked Out';
             await equipment.save();
-
             sendNotification(user._id, user.email, "Equipment Checked Out", `You have borrowed: ${equipment.name}.`, "success", savedTransaction._id).catch(console.error);
         } else {
-            // PENDING REQUEST (Student OR Projector Exception)
+            // PENDING REQUEST
             
             // 1. Notify Student
             sendNotification(
@@ -173,7 +170,11 @@ router.post('/checkout', verifyToken, async (req, res) => {
             details: `${status === 'Pending' ? 'Requested' : 'Borrowed'} ${equipment.name}`
         });
 
-        res.status(201).json(savedTransaction);
+        // Return status so frontend knows if it was instant or pending
+        res.status(201).json({ 
+            ...savedTransaction.toObject(),
+            serverStatusMessage: status === 'Pending' ? 'pending_approval' : 'success'
+        });
 
     } catch (err) {
         console.error(err);
