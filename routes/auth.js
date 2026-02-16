@@ -88,11 +88,12 @@ router.post('/login', async (req, res) => {
         // Note: Because we use isModified in the model, this save won't re-hash the password
         await user.save();
 
-        // 4. Generate JWT Token
+        // 4. Generate JWT Token (SESSION MANAGEMENT UPDATE)
+        // Set to 25 minutes as requested
         const token = jwt.sign(
             { id: user._id, role: user.role }, 
             process.env.JWT_SECRET || "mySuperSecretKey123", 
-            { expiresIn: "5d" } 
+            { expiresIn: "25m" } // 👈 CHANGED: Session expires in 25 minutes
         );
 
         // 5. Send Response (excluding password)
