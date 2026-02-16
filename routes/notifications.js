@@ -7,7 +7,7 @@ const { checkRole } = require('../middleware/checkRole'); // 👈 Imported check
 const { sendNotification } = require('../utils/emailService'); // 👈 Imported Email Service
 
 // ==========================================
-// 1. SEND NOTIFICATION (Admin/IT -> User)  <-- THIS WAS MISSING
+// 1. SEND NOTIFICATION (Admin/IT -> User)
 // ==========================================
 router.post('/send-to-user', verifyToken, checkRole(['Admin', 'IT_Staff']), async (req, res) => {
     try {
@@ -91,6 +91,58 @@ router.put('/mark-all-read', verifyToken, async (req, res) => {
         res.status(200).json("All read");
     } catch (err) {
         res.status(500).json(err);
+    }
+});
+
+// ==========================================
+// 5. CONTACT ALL ADMINS (For Staff/Users to Reply) <-- NEW FEATURE
+// ==========================================
+router.post('/contact-admins', verifyToken, async (req, res) => {
+    try {
+        const { subject, message } = req.body;
+        const sender = await User.findById(req.user.id);
+
+        if (!subject || !message) {
+            return res.status(400).json({ message: "Subject and message are required." });
+        }
+
+        // 1. Find ALL Admins
+        const admins = await User.find({ role: 'Admin' });
+
+        if (admins.length === 0) {
+            return res.status(404).json({ message: "No admins found to contact." });
+        }
+
+        // 2. Loop through Admins and Notify them
+        // We map over the array to trigger all notifications in parallel
+        const notifications = admins.map(async (admin) => {
+            // A. Save to DB (So Admin sees it in their bell icon)
+            await Notification.create({
+                recipient: admin._id,
+                title: `Message from ${sender.username || sender.email}`,
+                message: `Subject: ${subject}\n\n${message}`,
+                type: 'info',
+                read: false
+            });
+
+            // B. Send Email
+            return sendNotification(
+                admin._id,
+                admin.email,
+                `New Message: ${subject}`,
+                `You received a message from ${sender.username} (${sender.role}):\n\n${message}`,
+                'info'
+            ).catch(err => console.error(`Failed to email admin ${admin.email}`, err));
+        });
+
+        // Wait for all database writes and email triggers to finish
+        await Promise.all(notifications);
+
+        res.status(200).json({ message: "Admins have been notified." });
+
+    } catch (err) {
+        console.error("Contact Admin Error:", err);
+        res.status(500).json({ message: "Server Error" });
     }
 });
 
