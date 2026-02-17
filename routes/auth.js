@@ -11,35 +11,29 @@ router.post('/register', async (req, res) => {
         const { username, email, password, studentId } = req.body;
 
         // --- 1. INPUT VALIDATION ---
-        // Check for empty required fields
         if (!username || !email || !password) {
             return res.status(400).json({ message: "Please fill in all required fields." });
         }
 
-        // Check Password Strength
         if (password.length < 6) {
             return res.status(400).json({ message: "Password must be at least 6 characters." });
         }
 
-        // Check Email Format (Regex)
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) {
             return res.status(400).json({ message: "Invalid email format." });
         }
 
-        // --- 2. DUPLICATE CHECK (Your Custom Logic) ---
-        // Build the criteria array dynamically
+        // --- 2. DUPLICATE CHECK ---
         const checkCriteria = [
             { email: email }, 
             { username: username }
         ];
 
-        // Only add studentId to the check if it was provided
         if (studentId) {
             checkCriteria.push({ studentId: studentId });
         }
 
-        // Use $or to find if ANY of these match
         const existingUser = await User.findOne({ 
             $or: checkCriteria 
         });
@@ -49,11 +43,9 @@ router.post('/register', async (req, res) => {
         }
 
         // --- 3. CREATE USER ---
-        // We pass req.body directly. The 'pre-save' hook in User.js handles the hashing!
         const newUser = new User(req.body);
         const savedUser = await newUser.save();
         
-        // Remove password from the response for security
         const { password: _, ...userInfo } = savedUser._doc;
 
         res.status(201).json(userInfo);
@@ -76,7 +68,6 @@ router.post('/login', async (req, res) => {
         }
 
         // 2. VERIFY PASSWORD 
-        // Compare the plain text password (req.body) with the Hash (user.password)
         const isMatch = await bcrypt.compare(req.body.password, user.password);
         
         if (!isMatch) {
@@ -85,15 +76,13 @@ router.post('/login', async (req, res) => {
 
         // 3. Update Last Login
         user.lastLogin = new Date();
-        // Note: Because we use isModified in the model, this save won't re-hash the password
         await user.save();
 
         // 4. Generate JWT Token (SESSION MANAGEMENT UPDATE)
-        // Set to 25 minutes as requested
         const token = jwt.sign(
             { id: user._id, role: user.role }, 
             process.env.JWT_SECRET || "mySuperSecretKey123", 
-            { expiresIn: "25m" } // 👈 CHANGED: Session expires in 25 minutes
+            { expiresIn: "7m" } //  CHANGED: Session now expires in 7 minutes
         );
 
         // 5. Send Response (excluding password)
