@@ -458,9 +458,10 @@ router.post('/cancel/:id', verifyToken, async (req, res) => {
 });
 
 // ==========================================
-// 9. GET ALL HISTORY (For Reports)
+// 9. GET ALL HISTORY (For Reports) 
 // ==========================================
-router.get('/all-history', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), async (req, res) => {
+// 👇 CHANGED: Added 'IT_STAFF' to the roles array to fix the 403 Forbidden Error
+router.get('/all-history', verifyToken, checkRole(['IT', 'IT_Staff', 'IT_STAFF', 'Admin']), async (req, res) => {
     try {
         const transactions = await Transaction.find()
             .populate('user', 'username email responsibilityScore')
@@ -503,7 +504,7 @@ router.get('/security/dashboard-stats', verifyToken, async (req, res) => {
 // ==========================================
 // 12. Security Logs
 // ==========================================
-router.get('/security/access-logs', verifyToken, checkRole(['Security', 'Admin', 'IT_Staff']), async (req, res) => {
+router.get('/security/access-logs', verifyToken, checkRole(['Security', 'Admin', 'IT_Staff', 'IT_STAFF']), async (req, res) => {
     try {
         const totalBorrowed = await Transaction.countDocuments({ status: 'Checked Out' });
         const totalOverdue = await Transaction.countDocuments({ status: 'Overdue' });
