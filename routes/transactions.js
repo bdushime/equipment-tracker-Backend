@@ -179,7 +179,6 @@ router.post('/checkout', verifyToken, async (req, res) => {
 // ==========================================
 // 4a. REQUEST RETURN (New Flow from Student)
 // ==========================================
-// 👇 ADDED THIS ENTIRE ROUTE TO HANDLE THE STUDENT CLICKING "REQUEST RETURN"
 router.put('/:id/request-return', verifyToken, async (req, res) => {
     try {
         const transactionId = req.params.id;
@@ -527,25 +526,51 @@ router.get('/all-history', verifyToken, checkRole(['IT', 'IT_Staff', 'IT_STAFF',
 // ==========================================
 router.get('/security/dashboard-stats', verifyToken, async (req, res) => {
     try {
-        const activeCount = await Transaction.countDocuments({ status: 'Checked Out' });
+        // 👇 FIX: Added 'Pending Return' to the active count so it matches the IT staff view
+        const activeCount = await Transaction.countDocuments({ status: { $in: ['Checked Out', 'Pending Return'] } });
         const overdueCount = await Transaction.countDocuments({ status: 'Overdue' });
-        const sixMonthsAgo = new Date(); sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+        
+        const sixMonthsAgo = new Date(); 
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+        
         const rawTrend = await Transaction.aggregate([
             { $match: { createdAt: { $gte: sixMonthsAgo } } },
-            { $group: { _id: { $month: "$createdAt" }, checkouts: { $sum: { $cond: [{ $in: ["$status", ["Checked Out", "Returned", "Overdue"]] }, 1, 0] } }, overdue: { $sum: { $cond: [{ $eq: ["$status", "Overdue"] }, 1, 0] } } } },
+            { $group: { 
+                _id: { $month: "$createdAt" }, 
+                checkouts: { $sum: 1 }, 
+                overdue: { $sum: { $cond: [{ $eq: ["$status", "Overdue"] }, 1, 0] } } 
+            } },
             { $sort: { "_id": 1 } }
         ]);
+        
         const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-        const trendData = rawTrend.map(item => ({ name: monthNames[item._id - 1], checkouts: item.checkouts, failed: item.overdue }));
+        const trendData = rawTrend.map(item => ({ 
+            name: monthNames[item._id - 1], 
+            checkouts: item.checkouts, 
+            failed: item.overdue 
+        }));
+
+        // 👇 FIX: Changed 'equipment' to 'equipments' so the database join works correctly
         const equipmentStats = await Transaction.aggregate([
-            { $lookup: { from: 'equipment', localField: 'equipment', foreignField: '_id', as: 'eq' } },
+            { $lookup: { from: 'equipments', localField: 'equipment', foreignField: '_id', as: 'eq' } },
             { $unwind: "$eq" },
             { $group: { _id: "$eq.category", value: { $sum: 1 } } },
-            { $limit: 4 }
+            { $sort: { value: -1 } },
+            { $limit: 3 } // Only need top 3 for your bubble chart
         ]);
-        const formattedEqStats = equipmentStats.map(item => ({ name: item._id || "Uncategorized", value: item.value, color: "#" + Math.floor(Math.random()*16777215).toString(16) }));
+
+        const colors = ["#1A2240", "#BEBEE0", "#343264"];
+        const formattedEqStats = equipmentStats.map((item, index) => ({ 
+            name: item._id || "Uncategorized", 
+            value: item.value, 
+            color: colors[index] 
+        }));
+
         res.status(200).json({ activeCount, overdueCount, trendData, equipmentTypeData: formattedEqStats });
-    } catch (err) { res.status(500).json(err); }
+    } catch (err) { 
+        console.error(err);
+        res.status(500).json(err); 
+    }
 });
 
 // ==========================================
@@ -553,12 +578,12 @@ router.get('/security/dashboard-stats', verifyToken, async (req, res) => {
 // ==========================================
 router.get('/security/access-logs', verifyToken, checkRole(['Security', 'Admin', 'IT_Staff', 'IT_STAFF']), async (req, res) => {
     try {
-        const totalBorrowed = await Transaction.countDocuments({ status: 'Checked Out' });
-        const totalOverdue = await Transaction.countDocuments({ status: 'Overdue' });
-        const totalLost = await Equipment.countDocuments({ status: 'Lost' });
-        const totalDamaged = await Equipment.countDocuments({ status: 'Damaged' });
-        const logs = await Transaction.find().populate('user', 'username email role').populate('equipment', 'name serialNumber category').sort({ createdAt: -1 }).limit(100);
-        res.status(200).json({ stats: { totalBorrowed, totalOverdue, totalLost, totalDamaged }, logs });
+        const logs = await Transaction.find()
+            .populate('user', 'username email role')
+            .populate('equipment', 'name serialNumber category')
+            .sort({ createdAt: -1 })
+            .limit(100);
+        res.status(200).json({ logs });
     } catch (err) { res.status(500).json(err); }
 });
 
