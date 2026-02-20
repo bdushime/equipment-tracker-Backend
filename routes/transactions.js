@@ -20,7 +20,8 @@ const MAX_LOAN_HOURS = 24;
 router.get('/active', verifyToken, async (req, res) => {
     try {
         const transactions = await Transaction.find({
-            status: { $in: ['Pending', 'Checked Out', 'Overdue', 'Borrowed', 'Reserved'] }
+            // 👇 ADDED 'Pending Return' so IT staff sees return requests on their screen
+            status: { $in: ['Pending', 'Checked Out', 'Overdue', 'Borrowed', 'Reserved', 'Pending Return'] }
         })
         .populate('equipment', 'name serialNumber')
         .populate('user', 'username email responsibilityScore')
@@ -52,7 +53,7 @@ router.get('/my-borrowed', verifyToken, async (req, res) => {
 });
 
 // ==========================================
-// 3. Borrow Item (Checkout / Request) -- UPDATED WITH EXCEPTION LOGIC
+// 3. Borrow Item (Checkout / Request) 
 // ==========================================
 router.post('/checkout', verifyToken, async (req, res) => {
     try {
@@ -90,7 +91,6 @@ router.post('/checkout', verifyToken, async (req, res) => {
             return res.status(400).json({ message: "Error: Equipment is not available." });
         }
 
-        // 👇👇👇 NEW LOGIC: PROJECTOR EXCEPTION CHECK 👇👇👇
         let status = isStudent ? 'Pending' : 'Checked Out';
         let adminNote = "";
 
@@ -114,7 +114,6 @@ router.post('/checkout', verifyToken, async (req, res) => {
                 adminNote = " [SYSTEM FLAG: Projector requested in room with existing screen]";
             }
         }
-        // 👆👆👆 END NEW LOGIC 👆👆👆
 
         const newTransaction = new Transaction({
             user: targetUserId,
@@ -130,14 +129,10 @@ router.post('/checkout', verifyToken, async (req, res) => {
         const savedTransaction = await newTransaction.save();
 
         if (status === 'Checked Out') {
-            // STAFF MANUAL CHECKOUT
             equipment.status = 'Checked Out';
             await equipment.save();
             sendNotification(user._id, user.email, "Equipment Checked Out", `You have borrowed: ${equipment.name}.`, "success", savedTransaction._id).catch(console.error);
         } else {
-            // PENDING REQUEST
-            
-            // 1. Notify Student
             sendNotification(
                 user._id,
                 user.email,
@@ -147,7 +142,6 @@ router.post('/checkout', verifyToken, async (req, res) => {
                 savedTransaction._id
             ).catch(console.error);
 
-            // 2. Notify IT Staff
             User.find({ role: { $regex: /IT|Admin|Staff/i } }).then(staffMembers => {
                 staffMembers.forEach(staff => {
                     if (staff._id.toString() !== user._id.toString()) {
@@ -170,7 +164,6 @@ router.post('/checkout', verifyToken, async (req, res) => {
             details: `${status === 'Pending' ? 'Requested' : 'Borrowed'} ${equipment.name}`
         });
 
-        // Return status so frontend knows if it was instant or pending
         res.status(201).json({ 
             ...savedTransaction.toObject(),
             serverStatusMessage: status === 'Pending' ? 'pending_approval' : 'success'
@@ -182,8 +175,63 @@ router.post('/checkout', verifyToken, async (req, res) => {
     }
 });
 
+
 // ==========================================
-// 4. Return Item (Check-in)
+// 4a. REQUEST RETURN (New Flow from Student)
+// ==========================================
+// 👇 ADDED THIS ENTIRE ROUTE TO HANDLE THE STUDENT CLICKING "REQUEST RETURN"
+router.put('/:id/request-return', verifyToken, async (req, res) => {
+    try {
+        const transactionId = req.params.id;
+        
+        // Find the active transaction
+        const transaction = await Transaction.findById(transactionId).populate('equipment').populate('user');
+
+        if (!transaction) {
+            return res.status(404).json({ message: "Transaction not found." });
+        }
+
+        // Security check: Only the user who borrowed it can request a return
+        if (transaction.user._id.toString() !== req.user.id) {
+            return res.status(403).json({ message: "Unauthorized. You did not borrow this item." });
+        }
+
+        // Update the status
+        transaction.status = 'Pending Return';
+        await transaction.save();
+
+        // Send Notification to IT Staff
+        User.find({ role: { $regex: /IT|Admin|Staff/i } }).then(staffMembers => {
+            staffMembers.forEach(staff => {
+                sendNotification(
+                    staff._id,
+                    staff.email,
+                    "Return Request",
+                    `${transaction.user.username} has requested to return the ${transaction.equipment.name}. Please verify and check it in.`,
+                    "info",
+                    transaction._id
+                ).catch(console.error);
+            });
+        }).catch(console.error);
+
+        // Log the action
+        await AuditLog.create({
+            action: "RETURN_REQUESTED",
+            user: req.user.id,
+            details: `Requested to return ${transaction.equipment.name}`
+        });
+
+        res.status(200).json({ message: "Return requested successfully. Awaiting IT Staff approval.", transaction });
+
+    } catch (err) {
+        console.error("Error requesting return:", err);
+        res.status(500).json({ message: "Server Error", error: err.message });
+    }
+});
+
+
+// ==========================================
+// 4b. Return Item (Check-in by IT STAFF)
 // ==========================================
 router.post('/checkin', verifyToken, async (req, res) => {
     try {
@@ -460,7 +508,6 @@ router.post('/cancel/:id', verifyToken, async (req, res) => {
 // ==========================================
 // 9. GET ALL HISTORY (For Reports) 
 // ==========================================
-// 👇 CHANGED: Added 'IT_STAFF' to the roles array to fix the 403 Forbidden Error
 router.get('/all-history', verifyToken, checkRole(['IT', 'IT_Staff', 'IT_STAFF', 'Admin']), async (req, res) => {
     try {
         const transactions = await Transaction.find()
