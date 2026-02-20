@@ -5,9 +5,10 @@ const { verifyToken } = require('../middleware/verifyToken');
 const { checkRole } = require('../middleware/checkRole');
 
 // ==========================================
-// 1. Create New Equipment (IT/Admin only)
+// 1. Create New Equipment 
 // ==========================================
-router.post('/', verifyToken, checkRole(['IT', 'Admin']), async (req, res) => {
+// 👇 FIX: Added Security and IT_Staff to allowed roles
+router.post('/', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin', 'Security']), async (req, res) => {
     try {
         const newEquipment = new Equipment(req.body);
         const savedEquipment = await newEquipment.save();
@@ -65,7 +66,8 @@ router.get('/', async (req, res) => {
 // ==========================================
 // 4. Update Equipment (With Spy Logs 🕵️‍♂️)
 // ==========================================
-router.put('/:id', async (req, res) => {
+// 👇 FIX: Added authentication and role checks to the update route
+router.put('/:id', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin', 'Security']), async (req, res) => {
     try {
         console.log("-----------------------------------------");
         console.log("📝 UPDATE REQUEST RECEIVED");
@@ -100,9 +102,10 @@ router.put('/:id', async (req, res) => {
 });
 
 // ==========================================
-// 5. Delete Equipment (Admin only)
+// 5. Delete Equipment 
 // ==========================================
-router.delete('/:id', verifyToken, checkRole(['Admin']), async (req, res) => {
+// 👇 FIX: Added Security and IT_Staff to allowed roles
+router.delete('/:id', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin', 'Security']), async (req, res) => {
     try {
         await Equipment.findByIdAndDelete(req.params.id);
         res.status(200).json("Equipment has been deleted...");
