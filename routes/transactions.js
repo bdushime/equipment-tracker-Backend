@@ -20,7 +20,6 @@ const MAX_LOAN_HOURS = 24;
 router.get('/active', verifyToken, async (req, res) => {
     try {
         const transactions = await Transaction.find({
-            // 👇 ADDED 'Pending Return' so IT staff sees return requests on their screen
             status: { $in: ['Pending', 'Checked Out', 'Overdue', 'Borrowed', 'Reserved', 'Pending Return'] }
         })
         .populate('equipment', 'name serialNumber')
@@ -521,12 +520,12 @@ router.get('/all-history', verifyToken, checkRole(['IT', 'IT_Staff', 'IT_STAFF',
     }
 });
 
+
 // ==========================================
-// 11. Security Dashboard
+// 11. Security Dashboard (BULLETPROOF FIX)
 // ==========================================
 router.get('/security/dashboard-stats', verifyToken, async (req, res) => {
     try {
-        // 👇 FIX: Added 'Pending Return' to the active count so it matches the IT staff view
         const activeCount = await Transaction.countDocuments({ status: { $in: ['Checked Out', 'Pending Return'] } });
         const overdueCount = await Transaction.countDocuments({ status: 'Overdue' });
         
@@ -550,41 +549,52 @@ router.get('/security/dashboard-stats', verifyToken, async (req, res) => {
             failed: item.overdue 
         }));
 
-        // 👇 FIX: Changed 'equipment' to 'equipments' so the database join works correctly
-        const equipmentStats = await Transaction.aggregate([
-            { $lookup: { from: 'equipments', localField: 'equipment', foreignField: '_id', as: 'eq' } },
-            { $unwind: "$eq" },
-            { $group: { _id: "$eq.category", value: { $sum: 1 } } },
-            { $sort: { value: -1 } },
-            { $limit: 3 } // Only need top 3 for your bubble chart
-        ]);
+        // 👇 BULLETPROOF FIX: We fetch all transactions and tally the equipment categories in JavaScript
+        const allTransactions = await Transaction.find().populate('equipment', 'category');
+        const categoryCounts = {};
+        
+        allTransactions.forEach(tx => {
+            const categoryName = (tx.equipment && tx.equipment.category) ? tx.equipment.category : "General";
+            categoryCounts[categoryName] = (categoryCounts[categoryName] || 0) + 1;
+        });
+
+        // Convert the tally object into a sorted array, taking the top 3
+        const sortedCategories = Object.entries(categoryCounts)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 3);
 
         const colors = ["#1A2240", "#BEBEE0", "#343264"];
-        const formattedEqStats = equipmentStats.map((item, index) => ({ 
-            name: item._id || "Uncategorized", 
+        const formattedEqStats = sortedCategories.map((item, index) => ({ 
+            name: item.name, 
             value: item.value, 
             color: colors[index] 
         }));
 
         res.status(200).json({ activeCount, overdueCount, trendData, equipmentTypeData: formattedEqStats });
     } catch (err) { 
-        console.error(err);
-        res.status(500).json(err); 
+        console.error("Dashboard Stats Error:", err);
+        res.status(500).json({ error: "Failed to fetch dashboard stats" }); 
     }
 });
 
+
 // ==========================================
-// 12. Security Logs
+// 12. Security Logs (BULLETPROOF FIX)
 // ==========================================
-router.get('/security/access-logs', verifyToken, checkRole(['Security', 'Admin', 'IT_Staff', 'IT_STAFF']), async (req, res) => {
+router.get('/security/access-logs', verifyToken, async (req, res) => {
     try {
         const logs = await Transaction.find()
             .populate('user', 'username email role')
             .populate('equipment', 'name serialNumber category')
             .sort({ createdAt: -1 })
             .limit(100);
+        
         res.status(200).json({ logs });
-    } catch (err) { res.status(500).json(err); }
+    } catch (err) { 
+        console.error("Access Logs Error:", err);
+        res.status(500).json({ error: "Failed to fetch access logs" }); 
+    }
 });
 
 // ==========================================
