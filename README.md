@@ -1,6 +1,6 @@
 # 🛡️ Tracknity - Backend API
 
-The robust Node.js/Express backend powering the **Tracknity Equipment Tracking System**. It handles secure role-based authentication, real-time transaction processing, and data aggregation for dashboard analytics.
+The robust Node.js/Express backend powering the **Tracknity Equipment Tracking Systemm**. It handles secure role-based authentication, real-time transaction processing, and data aggregation for dashboard analytics.
 
 ##  Tech Stack
 * **Runtime:** Node.js
