@@ -42,7 +42,7 @@ const transactionSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        // 👇 UPDATED: Added 'Pending', 'Denied', and 'Checked Out'
+        // 👇 UPDATED: Added 'Pending Return' to the allowed list
         enum: [
             'Active', 
             'Borrowed', 
@@ -50,9 +50,10 @@ const transactionSchema = new mongoose.Schema({
             'Overdue', 
             'Reserved', 
             'Cancelled', 
-            'Pending',      // <--- ADDED
-            'Denied',       // <--- ADDED
-            'Checked Out'   // <--- ADDED
+            'Pending',      
+            'Denied',       
+            'Checked Out',
+            'Pending Return' // <--- NEWLY ADDED
         ],
         default: 'Borrowed'
     },
