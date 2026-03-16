@@ -3,12 +3,12 @@ const mongoose = require('mongoose');
 const transactionSchema = new mongoose.Schema({
     user: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',        
+        ref: 'User',
         required: true
     },
     equipment: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Equipment',   
+        ref: 'Equipment',
         required: true
     },
     // --- NEW FIELD: When does the booking START? ---
@@ -17,7 +17,7 @@ const transactionSchema = new mongoose.Schema({
     startTime: {
         type: Date,
         required: true,
-        default: Date.now 
+        default: Date.now
     },
     // We keep checkoutTime for record-keeping of when they actually picked it up
     checkoutTime: {
@@ -30,35 +30,36 @@ const transactionSchema = new mongoose.Schema({
     },
     returnTime: {
         type: Date,
-        default: null       
+        default: null
     },
     destination: {
         type: String,
-        required: true      
+        required: true
     },
     purpose: {
         type: String,
-        required: true      
+        required: true
     },
     status: {
         type: String,
         // 👇 UPDATED: Added 'Pending Return' to the allowed list
         enum: [
-            'Active', 
-            'Borrowed', 
-            'Returned', 
-            'Overdue', 
-            'Reserved', 
-            'Cancelled', 
-            'Pending',      
-            'Denied',       
+            'Active',
+            'Borrowed',
+            'Returned',
+            'Overdue',
+            'Reserved',
+            'Cancelled',
+            'Pending',
+            'Denied',
             'Checked Out',
             'Pending Return' // <--- NEWLY ADDED
         ],
         default: 'Borrowed'
     },
-    
-    checkoutPhotoUrl: { type: String, default: "" },
+
+
+    checkoutPhotoUrl: { type: [String], default: [] },
     signatureUrl: { type: String, default: "" }
 
 }, { timestamps: true });
