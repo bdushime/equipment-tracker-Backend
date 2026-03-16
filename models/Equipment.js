@@ -25,7 +25,7 @@ const equipmentSchema = new mongoose.Schema({
     type: {
         type: String,
         required: [true, 'Device category is required'],
-        enum: ['Laptop', 'Projector', 'Camera', 'Microphone', 'Tablet', 'Audio', 'Video', 'Router', 'Accessories', 'Electronics', 'Other']
+        enum: ['Projector','Microphone', 'Tablet', 'Router', 'Accessories', 'Electronics', 'Other']
     },
 
     serialNumber: {
