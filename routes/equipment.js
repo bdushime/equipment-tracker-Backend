@@ -294,11 +294,16 @@ router.get('/stats/availability', async (req, res) => {
 });
 
 // ==========================================
-// 4. BROWSE & FILTER ROUTE
+// 4. BROWSE & FILTER ROUTE (Paginated)
 // ==========================================
 router.get('/browse', async (req, res) => {
     try {
         const { search, category, status } = req.query;
+
+        const page = parseInt(req.query.page, 10) || 1;
+        const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200); // hard cap
+        const skip = (page - 1) * limit;
+
         let query = {};
 
         if (search) {
@@ -319,8 +324,18 @@ router.get('/browse', async (req, res) => {
             if (status === 'Unavailable') query.status = { $ne: 'Available' };
         }
 
-        const equipment = await Equipment.find(query).sort({ name: 1 });
-        res.status(200).json(equipment);
+        const [items, total] = await Promise.all([
+            Equipment.find(query).sort({ name: 1 }).skip(skip).limit(limit),
+            Equipment.countDocuments(query)
+        ]);
+
+        res.status(200).json({
+            items,
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit) || 1
+        });
 
     } catch (err) {
         console.error("Browse Error:", err);
@@ -329,12 +344,26 @@ router.get('/browse', async (req, res) => {
 });
 
 // ==========================================
-// 5. Get ALL Equipment (Simple List)
+// 5. Get ALL Equipment (Paginated Simple List)
 // ==========================================
 router.get('/', async (req, res) => {
     try {
-        const allEquipment = await Equipment.find();
-        res.status(200).json(allEquipment);
+        const page = parseInt(req.query.page, 10) || 1;
+        const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+        const skip = (page - 1) * limit;
+
+        const [items, total] = await Promise.all([
+            Equipment.find().sort({ createdAt: -1 }).skip(skip).limit(limit),
+            Equipment.countDocuments()
+        ]);
+
+        res.status(200).json({
+            items,
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit) || 1
+        });
     } catch (err) {
         res.status(500).json(err);
     }
