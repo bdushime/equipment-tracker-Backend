@@ -504,16 +504,31 @@ router.post('/cancel/:id', verifyToken, async (req, res) => {
 });
 
 // ==========================================
-// 9. GET ALL HISTORY (For Reports) 
+// 9. GET ALL HISTORY (For Reports) - Paginated
 // ==========================================
 router.get('/all-history', verifyToken, checkRole(['IT', 'IT_Staff', 'IT_STAFF', 'Admin']), async (req, res) => {
     try {
-        const transactions = await Transaction.find()
-            .populate('user', 'username email responsibilityScore')
-            .populate('equipment', 'name serialNumber category status')
-            .sort({ createdAt: -1 });
+        const page = parseInt(req.query.page, 10) || 1;
+        const limit = Math.min(parseInt(req.query.limit, 10) || 50, 500);
+        const skip = (page - 1) * limit;
 
-        res.status(200).json(transactions);
+        const [transactions, total] = await Promise.all([
+            Transaction.find()
+                .populate('user', 'username email responsibilityScore')
+                .populate('equipment', 'name serialNumber category status')
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit),
+            Transaction.countDocuments()
+        ]);
+
+        res.status(200).json({
+            items: transactions,
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit) || 1
+        });
     } catch (err) {
         console.error("Report fetch error:", err);
         res.status(500).json(err);
@@ -550,11 +565,11 @@ router.get('/security/dashboard-stats', verifyToken, async (req, res) => {
         }));
 
         // 👇 BULLETPROOF FIX: We fetch all transactions and tally the equipment categories in JavaScript
-        const allTransactions = await Transaction.find().populate('equipment', 'category');
+        const allTransactions = await Transaction.find().populate('equipment', 'type category');
         const categoryCounts = {};
         
         allTransactions.forEach(tx => {
-            const categoryName = (tx.equipment && tx.equipment.category) ? tx.equipment.category : "General";
+            const categoryName = (tx.equipment && (tx.equipment.type || tx.equipment.category)) ? (tx.equipment.type || tx.equipment.category) : "General";
             categoryCounts[categoryName] = (categoryCounts[categoryName] || 0) + 1;
         });
 
@@ -580,17 +595,31 @@ router.get('/security/dashboard-stats', verifyToken, async (req, res) => {
 
 
 // ==========================================
-// 12. Security Logs (BULLETPROOF FIX)
+// 12. Security Logs (BULLETPROOF FIX, Paginated)
 // ==========================================
 router.get('/security/access-logs', verifyToken, async (req, res) => {
     try {
-        const logs = await Transaction.find()
-            .populate('user', 'username email role')
-            .populate('equipment', 'name serialNumber category')
-            .sort({ createdAt: -1 })
-            .limit(100);
+        const page = parseInt(req.query.page, 10) || 1;
+        const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+        const skip = (page - 1) * limit;
+
+        const [logs, total] = await Promise.all([
+            Transaction.find()
+                .populate('user', 'username email role')
+                .populate('equipment', 'name serialNumber category')
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit),
+            Transaction.countDocuments()
+        ]);
         
-        res.status(200).json({ logs });
+        res.status(200).json({
+            logs,
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit) || 1
+        });
     } catch (err) { 
         console.error("Access Logs Error:", err);
         res.status(500).json({ error: "Failed to fetch access logs" }); 
