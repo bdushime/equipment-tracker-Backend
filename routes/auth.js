@@ -71,7 +71,7 @@ router.post('/login', async (req, res) => {
         const isMatch = await bcrypt.compare(req.body.password, user.password);
         
         if (!isMatch) {
-            return res.status(400).json({ message: "Wrong password!" });
+            return res.status(400).json({ message: "Invalid credentials!" });
         }
 
         // 3. Update Last Login
