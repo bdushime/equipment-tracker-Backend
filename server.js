@@ -19,6 +19,7 @@ const chartsRoute = require('./routes/charts');
 const notificationRoute = require('./routes/notifications');
 const iotRoute = require('./routes/iot');
 const classroomRoute = require('./routes/classrooms');
+const courseRoute = require('./routes/courses');
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
@@ -56,6 +57,7 @@ app.use('/api/config', require('./routes/config'));
 app.use('/api/notifications', notificationRoute);
 app.use('/api/iot', iotRoute);
 app.use('/api/classrooms', classroomRoute);
+app.use('/api/courses', courseRoute);
 
 // Checkout route to handle multiple file uploads
 app.post('/api/transactions/checkout', upload.array('checkoutPhotos', 10), async (req, res) => {
