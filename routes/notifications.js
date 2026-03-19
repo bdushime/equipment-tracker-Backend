@@ -9,9 +9,18 @@ const { sendNotification } = require('../utils/emailService');
 router.get('/', verifyToken, async (req, res) => {
     try {
         const notes = await Notification.find({ recipient: req.user.id })
-            .sort({ createdAt: -1 })
-            .limit(20);
+            .sort({ createdAt: -1 });
         res.status(200).json(notes);
+    } catch (err) {
+        res.status(500).json(err);
+    }
+});
+
+// Get Unread Count
+router.get('/unread-count', verifyToken, async (req, res) => {
+    try {
+        const count = await Notification.countDocuments({ recipient: req.user.id, read: false });
+        res.status(200).json({ count });
     } catch (err) {
         res.status(500).json(err);
     }

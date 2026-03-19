@@ -564,7 +564,17 @@ router.get('/admin/dashboard-stats', verifyToken, checkRole(['Admin']), async (r
 
         const totalEquipment = await Equipment.countDocuments();
         const availableEquipment = await Equipment.countDocuments({ status: 'Available' });
-        const atRiskItems = await Transaction.countDocuments({ status: 'Overdue' });
+
+        // Strictly count only VALID Overdue transactions (existing user & equipment, and NOT yet returned)
+        const allOverdueRows = await Transaction.find({ status: 'Overdue' }).populate('user equipment');
+        const validOverdueRows = allOverdueRows.filter(t => t.user && t.equipment && !t.returnTime);
+        const overdueCount = validOverdueRows.length;
+        const overdueNames = validOverdueRows.map(t => `${t.user?.username || 'Unknown'}: ${t.equipment?.name || 'Unknown'}`).join(', ');
+
+        const maintenanceCount = await Equipment.countDocuments({ status: 'Maintenance' });
+        const deniedCount = await Transaction.countDocuments({ status: 'Denied' });
+        const atRiskItems = overdueCount;
+
 
         const systemStatus = "Online";
 
@@ -581,6 +591,10 @@ router.get('/admin/dashboard-stats', verifyToken, checkRole(['Admin']), async (r
                 totalEquipment,
                 availableEquipment,
                 atRiskItems,
+                overdueCount,
+                overdueNames,
+                maintenanceCount,
+                deniedCount,
                 lowScoreUsers,
                 systemStatus
             },

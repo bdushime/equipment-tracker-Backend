@@ -90,7 +90,22 @@ router.post('/login', async (req, res) => {
 
         // 3. Update Last Login
         user.lastLogin = new Date();
-        // Note: Because we use isModified in the model, this save won't re-hash the password
+
+        // Capture Device Info from User Agent
+        const ua = req.headers['user-agent'] || "";
+        if (ua.includes('Mobi') && !ua.includes('Tablet')) {
+            user.lastDevice = "Mobile Device";
+        } else if (ua.includes('Tablet') || ua.includes('iPad')) {
+            user.lastDevice = "Tablet Browser";
+        } else {
+            user.lastDevice = "Desktop Browser";
+        }
+
+        user.lastIp = req.ip || "10.0.0.X";
+        user.lastLocation = "Kigali, RW"; // Default for now
+
+        console.log(`[LOGIN] User: ${user.username}, Device: ${user.lastDevice}, UA: ${ua.substring(0, 50)}...`);
+
         await user.save();
 
         // 4. Generate JWT Token

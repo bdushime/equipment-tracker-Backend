@@ -18,8 +18,6 @@ const UserSchema = new mongoose.Schema({
     },
     role: {
         type: String,
-        // Removed duplicate 'Security'
-        enum: ['Student', 'Admin', 'Security', 'IT_Staff'],
         default: 'Student'
     },
     studentId: {
@@ -43,8 +41,12 @@ const UserSchema = new mongoose.Schema({
     },
     lastLogin: {
         type: Date,
-        default: Date.now // 👇 NEW: Added default
-    }
+        default: Date.now
+    },
+    // Device Tracking
+    lastDevice: { type: String, default: "Web Browser" },
+    lastIp: { type: String, default: "127.0.0.1" },
+    lastLocation: { type: String, default: "Kigali, RW" }
 }, { timestamps: true });
 
 UserSchema.pre('save', async function () {

@@ -58,7 +58,10 @@ const transactionSchema = new mongoose.Schema({
     },
 
     checkoutPhotoUrl: { type: String, default: "" },
-    signatureUrl: { type: String, default: "" }
+    signatureUrl: { type: String, default: "" },
+
+    // Added to prevent spamming admins with overdue alerts
+    adminAlerted: { type: Boolean, default: false }
 
 }, { timestamps: true });
 
