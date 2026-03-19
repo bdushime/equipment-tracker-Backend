@@ -8,7 +8,7 @@ const path = require('path');
 const startIoTCheck = require('./utils/iotCheck');
 
 // Import your routes
-const equipmentRoute = require('./routes/temp');
+const equipmentRoute = require('./routes/equipment');
 const authRoute = require('./routes/auth');
 const userRoute = require('./routes/users');
 const transactionRoute = require('./routes/transactions');
