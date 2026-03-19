@@ -26,7 +26,7 @@ router.post('/register', async (req, res) => {
 
         // --- 2. DUPLICATE CHECK ---
         const checkCriteria = [
-            { email: email }, 
+            { email: email },
             { username: username }
         ];
 
@@ -34,10 +34,11 @@ router.post('/register', async (req, res) => {
             checkCriteria.push({ studentId: studentId });
         }
 
-        const existingUser = await User.findOne({ 
-            $or: checkCriteria 
+        // Use $or to find if ANY of these match
+        const existingUser = await User.findOne({
+            $or: checkCriteria
         });
-        
+
         if (existingUser) {
             return res.status(400).json({ message: "User already exists (Email, Username, or Student ID)!" });
         }
@@ -45,7 +46,7 @@ router.post('/register', async (req, res) => {
         // --- 3. CREATE USER ---
         const newUser = new User(req.body);
         const savedUser = await newUser.save();
-        
+        // Remove password from the response for security
         const { password: _, ...userInfo } = savedUser._doc;
 
         res.status(201).json(userInfo);
@@ -67,27 +68,46 @@ router.post('/login', async (req, res) => {
             return res.status(404).json({ message: "User not found!" });
         }
 
+        // --- NEW: Check if user is suspended
+        if (user.status === 'Suspended') {
+            return res.status(403).json({ message: "Your account is suspended. Please contact the administrator." });
+        }
+
         // 2. VERIFY PASSWORD 
         const isMatch = await bcrypt.compare(req.body.password, user.password);
-        
+
         if (!isMatch) {
             return res.status(400).json({ message: "Invalid credentials!" });
         }
 
         // 3. Update Last Login
         user.lastLogin = new Date();
+        // Capture Device Info from User Agent
+        const ua = req.headers['user-agent'] || "";
+        if (ua.includes('Mobi') && !ua.includes('Tablet')) {
+            user.lastDevice = "Mobile Device";
+        } else if (ua.includes('Tablet') || ua.includes('iPad')) {
+            user.lastDevice = "Tablet Browser";
+        } else {
+            user.lastDevice = "Desktop Browser";
+        }
+
+        user.lastIp = req.ip || "10.0.0.X";
+        user.lastLocation = "Kigali, RW"; // Default for now
+
+        console.log(`[LOGIN] User: ${user.username}, Device: ${user.lastDevice}, UA: ${ua.substring(0, 50)}...`);
         await user.save();
 
         // 4. Generate JWT Token (SESSION MANAGEMENT UPDATE)
         const token = jwt.sign(
-            { id: user._id, role: user.role }, 
-            process.env.JWT_SECRET || "mySuperSecretKey123", 
-            { expiresIn: "7m" } //  CHANGED: Session now expires in 7 minutes
+            { id: user._id, role: user.role },
+            process.env.JWT_SECRET || "mySuperSecretKey123",
+            { expiresIn: "5d" }
         );
 
         // 5. Send Response (excluding password)
         const { password, ...others } = user._doc;
-        
+
         res.status(200).json({ ...others, token });
 
     } catch (err) {

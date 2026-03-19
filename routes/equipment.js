@@ -329,8 +329,18 @@ router.get('/browse', async (req, res) => {
             Equipment.countDocuments(query)
         ]);
 
+        // Flatten coordinates here too
+        const responseItems = items.map(item => {
+            const doc = item.toObject();
+            if (doc.geoCoordinates && doc.geoCoordinates.lat && doc.geoCoordinates.lng) {
+                doc.lat = doc.geoCoordinates.lat;
+                doc.lng = doc.geoCoordinates.lng;
+            }
+            return doc;
+        });
+
         res.status(200).json({
-            items,
+            items: responseItems,
             page,
             limit,
             total,
@@ -357,8 +367,18 @@ router.get('/', async (req, res) => {
             Equipment.countDocuments()
         ]);
 
+        // Flatten coordinates for frontend compatibility
+        const responseItems = items.map(item => {
+            const doc = item.toObject(); // Convert to plain object
+            if (doc.geoCoordinates && doc.geoCoordinates.lat && doc.geoCoordinates.lng) {
+                doc.lat = doc.geoCoordinates.lat;
+                doc.lng = doc.geoCoordinates.lng;
+            }
+            return doc;
+        });
+
         res.status(200).json({
-            items,
+            items: responseItems,
             page,
             limit,
             total,

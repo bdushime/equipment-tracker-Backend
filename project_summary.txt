@@ -1,0 +1,146 @@
+================================================================================
+PROJECT DATASETS & PSEUDO-CODE SUMMARY: EQUIPMENT TRACKER SYSTEM
+================================================================================
+
+PART 1: DATASETS (Database Tables / Mongoose Models)
+--------------------------------------------------------------------------------
+
+1. User (Collection: users)
+   Purpose: Handles authentication, profile management, and role-based access.
+   - Variables:
+     - username (String, Unique): ID for login.
+     - email (String, Unique): User's primary email.
+     - password (String, Hashed): Bcrypt secured password.
+     - role (Enum): ['Student', 'Admin', 'Security', 'IT_Staff'].
+     - studentId (String): For student identification.
+     - fullName (String): User's real name.
+     - department (String): Faculty or department.
+     - phone (String): Contact info.
+     - responsibilityScore (Number, 0-100): Used for borrowing eligibility.
+     - lastLogin (Date): Tracks system activity.
+     - createdAt/updatedAt: System timestamps.
+
+2. Equipment (Collection: equipments)
+   Purpose: Inventory of all trackable assets and their current state.
+   - Variables:
+     - name (String): Item name (e.g., "Sony Camera").
+     - description (String): Brief details.
+     - type (Enum): ['Laptop', 'Projector', 'Camera', etc.].
+     - serialNumber (String, Unique): Unique hardware ID.
+     - status (Enum): ['Available', 'Checked Out', 'Maintenance', 'Lost'].
+     - location (Mixed): Current storage or room.
+     - condition (String): Physical state.
+     - iotTag (String, Unique): IoT tracking identifier.
+     - trackingStatus (Enum): ['Safe', 'Lost', 'Unknown'].
+     - lastSeen (Date): Last IoT heartbeat recorded.
+     - batteryLevel (Number): IoT tag battery life.
+     - geoCoordinates (lat, lng): Exact map location.
+
+3. Transaction (Collection: transactions)
+   Purpose: Tracks the lifecycle of a borrow (request -> active -> return).
+   - Variables:
+     - user (Reference: User): Who borrowed the item.
+     - equipment (Reference: Equipment): What was borrowed.
+     - startTime (Date): When the booking starts.
+     - checkoutTime (Date): When the item was physically picked up.
+     - expectedReturnTime (Date): Due date.
+     - returnTime (Date): When it was finally returned.
+     - destination (String): Where the item will be used.
+     - purpose (String): Why it's being borrowed.
+     - status (Enum): ['Pending', 'Checked Out', 'Returned', 'Overdue', 'Reserved', 'Cancelled', 'Denied'].
+     - checkoutPhotoUrl (String): Visual proof of checkout.
+     - signatureUrl (String): User signature.
+
+4. Notification (Collection: notifications)
+   Purpose: System alerts for users regarding borrows, returns, and security.
+   - Variables:
+     - recipient (Reference: User): Target user.
+     - title (String): Alert header.
+     - message (String): Alert body.
+     - type (Enum): ['info', 'success', 'warning', 'error'].
+     - relatedId (String): ID of related transaction/item.
+     - read (Boolean): Read/Unread status.
+
+5. Ticket (Collection: tickets)
+   Purpose: Support and issue reporting for users.
+   - Variables:
+     - user (Reference: User): Reporter.
+     - email (String): Contact email.
+     - subject (String): Issue title.
+     - message (String): Full description.
+     - status (Enum): ['Open', 'In Progress', 'Resolved', 'Closed'].
+
+6. AuditLog (Collection: auditlogs)
+   Purpose: High-level security tracking for administrative actions.
+   - Variables:
+     - action (String): What happened (e.g., "USER_DELETED").
+     - user (Reference: User): Who performed the action.
+     - details (String): Detailed description of changes.
+     - ipAddress (String): Origin IP.
+     - timestamp (Date): Event time.
+
+7. Config (Collection: configs)
+   Purpose: Global system parameters.
+   - Variables:
+     - systemName (String): Application name.
+     - loanDuration (Number): Standard borrow time in days.
+     - latePenalty (Number): Points/penalty per late day.
+     - maintenanceMode (Boolean): System-wide lock status.
+
+
+PART 2: PROJECT LOGIC (Pseudo-code)
+--------------------------------------------------------------------------------
+
+1. AUTHENTICATION FLOW
+   - IF registration:
+       - Validate inputs (email format, password length).
+       - Check if Email/Username exists in DB.
+       - Hash password via Model pre-save hook.
+       - Save User.
+   - IF login:
+       - Find user by Email.
+       - IF password matches hash:
+           - Update 'lastLogin' timestamp.
+           - Sign JWT Token with User ID and Role.
+           - Return User info + Token to Frontend.
+
+2. BORROWING PROCESS (TRANSACTION)
+   - User selects 'Equipment' and 'Due Date'.
+   - SYSTEM CHECK:
+       - Is Equipment Status 'Available'?
+       - Is User's responsibilityScore > 60?
+       - Is duration < 24 hours (for students)?
+   - IF Student:
+       - Create Transaction with status 'Pending'.
+       - Send notification to IT Staff.
+   - IF IT Staff/Admin:
+       - Create Transaction with status 'Checked Out'.
+       - Update Equipment status to 'Checked Out'.
+   - Trigger email/system alerts for confirmation.
+
+3. RETURNING PROCESS
+   - Find active Transaction for User and Equipment.
+   - Record 'returnTime' as NOW.
+   - IF current date > expectedReturnTime:
+       - Calculate penalty: (Days Late * config.latePenalty).
+       - Subtract penalty from User responsibilityScore.
+   - ELSE:
+       - Reward user: Add +2 to responsibilityScore (Max 100).
+   - Update Equipment status back to 'Available'.
+   - Update Transaction status to 'Returned'.
+
+4. IOT & MONITORING (BACKGROUND TASKS)
+   - Every X minutes:
+       - Scan for Devices with 'iotTag'.
+       - IF device hasn't been 'Seen' in 30 minutes:
+           - Set Equipment trackingStatus to 'Unknown'.
+           - IF status was 'Checked Out', flag as 'At Risk'.
+       - IF coordinates are outside 'Safe Zone':
+           - Set Equipment status to 'Lost'.
+           - Send High-Priority alert to Security and User.
+
+5. ANALYTICS & REPORTS
+   - GET Transactions where status 'Overdue'.
+   - Aggregrate counts: Total items, Active borrows, Damaged inventory.
+   - Group transactions by Month to generate 'Weekly/Monthly Usage Trends'.
+================================================================================

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
-const { verifyToken } = require('../middleware/verifyToken'); 
+const { verifyToken } = require('../middleware/verifyToken');
 const { checkRole } = require('../middleware/checkRole'); // 👇 IMPORT THIS
 
 // ==========================================
@@ -55,7 +55,7 @@ router.post('/', verifyToken, checkRole(['Admin']), async (req, res) => {
         });
 
         const savedUser = await newUser.save();
-        
+
         // Remove password before sending back
         const { password, ...others } = savedUser._doc;
         res.status(201).json(others);
@@ -73,7 +73,7 @@ router.post('/', verifyToken, checkRole(['Admin']), async (req, res) => {
 router.get('/profile', verifyToken, async (req, res) => {
     try {
         const user = await User.findById(req.user.id);
-        
+
         if (!user) {
             return res.status(404).json({ message: "User not found" });
         }
@@ -97,13 +97,27 @@ router.put('/:id', verifyToken, async (req, res) => {
     }
 
     try {
+        let updateData = { ...req.body };
+
+        // Handle frontend splitting firstName/lastName
+        if (updateData.firstName && updateData.lastName) {
+            updateData.fullName = `${updateData.firstName} ${updateData.lastName}`;
+        }
+
+        if (updateData.password) {
+            const bcrypt = require('bcryptjs');
+            const salt = await bcrypt.genSalt(10);
+            updateData.password = await bcrypt.hash(updateData.password, salt);
+        }
+
         const updatedUser = await User.findByIdAndUpdate(
             req.params.id,
-            { $set: req.body },
+            { $set: updateData },
             { new: true }
         );
         res.status(200).json(updatedUser);
     } catch (err) {
+        console.error("User Update Error:", err);
         res.status(500).json(err);
     }
 });

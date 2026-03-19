@@ -53,14 +53,16 @@ const transactionSchema = new mongoose.Schema({
             'Pending',
             'Denied',
             'Checked Out',
-            'Pending Return' // <--- NEWLY ADDED
+            'Pending Return'
         ],
         default: 'Borrowed'
     },
 
-
     checkoutPhotoUrl: { type: [String], default: [] },
-    signatureUrl: { type: String, default: "" }
+    signatureUrl: { type: String, default: "" },
+
+    // Added to prevent spamming admins with overdue alerts
+    adminAlerted: { type: Boolean, default: false }
 
 }, { timestamps: true });
 

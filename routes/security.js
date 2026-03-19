@@ -18,12 +18,13 @@ router.get('/', verifyToken, checkRole(['Admin']), async (req, res) => {
         const auditLogs = logs.map(log => ({
             id: log._id,
             user: log.user?.username || "Unknown",
-            action: log.status === 'Checked Out' ? 'Equipment Checkout' : 
+            action: log.status === 'Overdue' ? 'Overdue Alert' :
+                log.status === 'Checked Out' ? 'Equipment Checkout' :
                     log.status === 'Returned' ? 'Equipment Return' : 'Status Update',
             target: log.equipment?.name || "Deleted Item",
-            ip: "192.168.1.X", // Mock IP as we don't track it yet
+            ip: log.user?.lastIp || "192.168.1.X",
             time: new Date(log.createdAt).toLocaleString(),
-            status: "Success",
+            status: log.status === 'Overdue' ? "Critical" : "Success",
             severity: log.status === 'Overdue' ? 'High' : 'Low'
         }));
 
@@ -35,21 +36,23 @@ router.get('/', verifyToken, checkRole(['Admin']), async (req, res) => {
         const activeSessions = activeUsers.map(user => ({
             user: user.username,
             role: user.role,
-            location: "Kigali, RW", // Mock Location
-            device: "Web Browser",   // Mock Device
-            ip: "10.0.0.X",          // Mock IP
+            location: user.lastLocation || "Kigali, RW",
+            device: user.lastDevice || "Web Browser",
+            ip: user.lastIp || "10.0.0.X",
             loginTime: new Date(user.lastLogin).toLocaleTimeString()
         }));
 
         // 3. COMPLIANCE STATS (Calculated)
         const overdueCount = await Transaction.countDocuments({ status: 'Overdue' });
-        const totalItems = await Transaction.countDocuments({ status: 'Checked Out' });
+        const totalItems = await Transaction.countDocuments({
+            status: { $in: ['Checked Out', 'Borrowed', 'Overdue'] }
+        });
         const returnRate = totalItems > 0 ? ((overdueCount / totalItems) * 100).toFixed(1) : 0;
 
         const complianceItems = [
-            { id: 1, policy: "Data Retention", status: "Compliant", lastCheck: "Auto", details: "Logs retained for 30 days." },
-            { id: 2, policy: "Equipment Return Rate", status: returnRate > 10 ? "Critical" : "Compliant", lastCheck: "Live", details: `${returnRate}% overdue (Threshold: 10%)` },
-            { id: 3, policy: "Admin Access", status: "Compliant", lastCheck: "Live", details: "Multi-factor auth enabled." }
+            { id: 1, policy: "Data Retention", status: "Compliant", lastCheck: "Auto", details: "Logs retained for 30 days.", link: "/admin/security" },
+            { id: 2, policy: "Equipment Return Rate", status: returnRate > 10 ? "Critical" : "Compliant", lastCheck: "Live", details: `${returnRate}% overdue (Threshold: 10%)`, link: "/admin/reports" },
+            { id: 3, policy: "Admin Access", status: "Compliant", lastCheck: "Live", details: "Multi-factor auth enabled.", link: "/admin/users" }
         ];
 
         res.status(200).json({
