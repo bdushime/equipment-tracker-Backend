@@ -8,11 +8,29 @@ const { checkRole } = require('../middleware/checkRole'); // 👇 IMPORT THIS
 // 1. ADMIN ROUTES (Manage Users)
 // ==========================================
 
-// GET ALL USERS (For Admin User List)
+// GET ALL USERS (For Admin User List) - Paginated
 router.get('/', verifyToken, checkRole(['Admin']), async (req, res) => {
     try {
-        const users = await User.find().select('-password').sort({ createdAt: -1 });
-        res.status(200).json(users);
+        const page = parseInt(req.query.page, 10) || 1;
+        const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+        const skip = (page - 1) * limit;
+
+        const [users, total] = await Promise.all([
+            User.find()
+                .select('-password')
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit),
+            User.countDocuments()
+        ]);
+
+        res.status(200).json({
+            items: users,
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit) || 1
+        });
     } catch (err) {
         res.status(500).json(err);
     }

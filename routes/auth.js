@@ -11,30 +11,25 @@ router.post('/register', async (req, res) => {
         const { username, email, password, studentId } = req.body;
 
         // --- 1. INPUT VALIDATION ---
-        // Check for empty required fields
         if (!username || !email || !password) {
             return res.status(400).json({ message: "Please fill in all required fields." });
         }
 
-        // Check Password Strength
         if (password.length < 6) {
             return res.status(400).json({ message: "Password must be at least 6 characters." });
         }
 
-        // Check Email Format (Regex)
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) {
             return res.status(400).json({ message: "Invalid email format." });
         }
 
-        // --- 2. DUPLICATE CHECK (Your Custom Logic) ---
-        // Build the criteria array dynamically
+        // --- 2. DUPLICATE CHECK ---
         const checkCriteria = [
             { email: email },
             { username: username }
         ];
 
-        // Only add studentId to the check if it was provided
         if (studentId) {
             checkCriteria.push({ studentId: studentId });
         }
@@ -49,10 +44,8 @@ router.post('/register', async (req, res) => {
         }
 
         // --- 3. CREATE USER ---
-        // We pass req.body directly. The 'pre-save' hook in User.js handles the hashing!
         const newUser = new User(req.body);
         const savedUser = await newUser.save();
-
         // Remove password from the response for security
         const { password: _, ...userInfo } = savedUser._doc;
 
@@ -81,16 +74,14 @@ router.post('/login', async (req, res) => {
         }
 
         // 2. VERIFY PASSWORD 
-        // Compare the plain text password (req.body) with the Hash (user.password)
         const isMatch = await bcrypt.compare(req.body.password, user.password);
 
         if (!isMatch) {
-            return res.status(400).json({ message: "Wrong password!" });
+            return res.status(400).json({ message: "Invalid credentials!" });
         }
 
         // 3. Update Last Login
         user.lastLogin = new Date();
-
         // Capture Device Info from User Agent
         const ua = req.headers['user-agent'] || "";
         if (ua.includes('Mobi') && !ua.includes('Tablet')) {
@@ -105,10 +96,9 @@ router.post('/login', async (req, res) => {
         user.lastLocation = "Kigali, RW"; // Default for now
 
         console.log(`[LOGIN] User: ${user.username}, Device: ${user.lastDevice}, UA: ${ua.substring(0, 50)}...`);
-
         await user.save();
 
-        // 4. Generate JWT Token
+        // 4. Generate JWT Token (SESSION MANAGEMENT UPDATE)
         const token = jwt.sign(
             { id: user._id, role: user.role },
             process.env.JWT_SECRET || "mySuperSecretKey123",

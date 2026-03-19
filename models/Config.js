@@ -9,7 +9,21 @@ const ConfigSchema = new mongoose.Schema({
     loanDuration: { type: Number, default: 3 }, // Days
     maxRenewals: { type: Number, default: 1 },
     latePenalty: { type: Number, default: 5 },
-    damagePenalty: { type: Number, default: 10 }
+    damagePenalty: { type: Number, default: 10 },
+
+    // Dynamic Lists for Dropdowns
+    equipmentCategories: {
+        type: [String],
+        default: ["Laptop", "Tablet", "Camera", "Audio", "Video", "Projector", "Accessories", "Electronics", "Other"]
+    },
+    equipmentConditions: {
+        type: [String],
+        default: ["Excellent", "Good", "Fair", "Poor", "Damaged"]
+    },
+    equipmentStatuses: {
+        type: [String],
+        default: ["Available", "Checked Out", "Maintenance", "Damaged", "Lost"]
+    }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Config', ConfigSchema);
