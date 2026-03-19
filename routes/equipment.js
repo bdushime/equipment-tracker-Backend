@@ -130,7 +130,7 @@ router.post('/bulk', verifyToken, checkRole(['IT', 'Admin', 'Security']), async 
             totalProcessed: devices.length
         };
 
-        // Process each device
+        // Process each devic
         for (let i = 0; i < devices.length; i++) {
             const device = { ...devices[i] };
             const rowNumber = i + 1;
