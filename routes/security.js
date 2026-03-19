@@ -18,9 +18,15 @@ router.get('/', verifyToken, checkRole(['Admin']), async (req, res) => {
         const auditLogs = logs.map(log => ({
             id: log._id,
             user: log.user?.username || "Unknown",
-            action: log.status === 'Overdue' ? 'Overdue Alert' :
+            action: (log.status === 'Overdue' || (log.returnTime === null && new Date(log.expectedReturnTime) < new Date())) ? 'Overdue Alert' :
                 log.status === 'Checked Out' ? 'Equipment Checkout' :
-                    log.status === 'Returned' ? 'Equipment Return' : 'Status Update',
+                    log.status === 'Borrowed' ? 'Equipment Checkout' :
+                        log.status === 'Returned' ? 'Equipment Return' :
+                            log.status === 'Reserved' ? 'Booking Confirmed' :
+                                log.status === 'Pending' ? 'Approval Pending' :
+                                    log.status === 'Denied' ? 'Request Denied' :
+                                        log.status === 'Cancelled' ? 'Reservation Cancelled' :
+                                            log.status === 'Active' ? 'Live Session' : 'Activity Log',
             target: log.equipment?.name || "Deleted Item",
             ip: log.user?.lastIp || "192.168.1.X",
             time: new Date(log.createdAt).toLocaleString(),

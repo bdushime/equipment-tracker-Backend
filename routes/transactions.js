@@ -650,14 +650,29 @@ router.get('/admin/dashboard-stats', verifyToken, checkRole(['Admin']), async (r
         const availableEquipment = await Equipment.countDocuments({ status: 'Available' });
 
         // Strictly count only VALID Overdue transactions (existing user & equipment, and NOT yet returned)
-        const allOverdueRows = await Transaction.find({ status: 'Overdue' }).populate('user equipment');
-        const validOverdueRows = allOverdueRows.filter(t => t.user && t.equipment && !t.returnTime);
-        const overdueCount = validOverdueRows.length;
-        const overdueNames = validOverdueRows.map(t => `${t.user?.username || 'Unknown'}: ${t.equipment?.name || 'Unknown'}`).join(', ');
+        // Bulletproof: Count both explicitly marked 'Overdue' AND items past deadline that haven't been returned
+        const validOverdueRows = await Transaction.find({
+            $and: [
+                { returnTime: null },
+                {
+                    $or: [
+                        { status: 'Overdue' },
+                        { expectedReturnTime: { $lt: new Date() }, status: { $in: ['Checked Out', 'Borrowed', 'Active'] } }
+                    ]
+                }
+            ]
+        }).populate('user equipment');
+
+        const filteredValidOverdue = validOverdueRows.filter(t => t.user && t.equipment);
+        const overdueCount = filteredValidOverdue.length;
+        const overdueNames = filteredValidOverdue.map(t => `${t.user?.username || 'Unknown'}: ${t.equipment?.name || 'Unknown'}`).join(', ');
 
         const maintenanceCount = await Equipment.countDocuments({ status: 'Maintenance' });
+        const damagedCount = await Equipment.countDocuments({ status: 'Damaged' });
         const deniedCount = await Transaction.countDocuments({ status: 'Denied' });
-        const atRiskItems = overdueCount;
+
+        // At-Risk = Overdue + Maintenance + Damaged
+        const atRiskItems = overdueCount + maintenanceCount + damagedCount;
 
 
         const systemStatus = "Online";
@@ -678,6 +693,7 @@ router.get('/admin/dashboard-stats', verifyToken, checkRole(['Admin']), async (r
                 overdueCount,
                 overdueNames,
                 maintenanceCount,
+                damagedCount,
                 deniedCount,
                 lowScoreUsers,
                 systemStatus
