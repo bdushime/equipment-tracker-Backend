@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs'); 
+const bcrypt = require('bcryptjs');
 
 const UserSchema = new mongoose.Schema({
     username: {
@@ -19,7 +19,7 @@ const UserSchema = new mongoose.Schema({
     role: {
         type: String,
         // Removed duplicate 'Security'
-        enum: ['Student', 'Admin', 'Security', 'IT_Staff'], 
+        enum: ['Student', 'Admin', 'Security', 'IT_Staff'],
         default: 'Student'
     },
     studentId: {
@@ -27,14 +27,19 @@ const UserSchema = new mongoose.Schema({
     },
     fullName: { type: String },
     // 👇 NEW: Added Department for Admin Panel
-    department: { 
-        type: String, 
-        default: 'General' 
-    }, 
+    department: {
+        type: String,
+        default: 'General'
+    },
     phone: { type: String },
     responsibilityScore: {
         type: Number,
         default: 100
+    },
+    status: {
+        type: String,
+        enum: ['Active', 'Suspended'],
+        default: 'Active'
     },
     lastLogin: {
         type: Date,
@@ -42,10 +47,10 @@ const UserSchema = new mongoose.Schema({
     }
 }, { timestamps: true });
 
-UserSchema.pre('save', async function() { 
+UserSchema.pre('save', async function () {
     // If password is not modified, return
     if (!this.isModified('password')) {
-        return; 
+        return;
     }
 
     // Generate salt and hash

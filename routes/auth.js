@@ -30,7 +30,7 @@ router.post('/register', async (req, res) => {
         // --- 2. DUPLICATE CHECK (Your Custom Logic) ---
         // Build the criteria array dynamically
         const checkCriteria = [
-            { email: email }, 
+            { email: email },
             { username: username }
         ];
 
@@ -40,10 +40,10 @@ router.post('/register', async (req, res) => {
         }
 
         // Use $or to find if ANY of these match
-        const existingUser = await User.findOne({ 
-            $or: checkCriteria 
+        const existingUser = await User.findOne({
+            $or: checkCriteria
         });
-        
+
         if (existingUser) {
             return res.status(400).json({ message: "User already exists (Email, Username, or Student ID)!" });
         }
@@ -52,7 +52,7 @@ router.post('/register', async (req, res) => {
         // We pass req.body directly. The 'pre-save' hook in User.js handles the hashing!
         const newUser = new User(req.body);
         const savedUser = await newUser.save();
-        
+
         // Remove password from the response for security
         const { password: _, ...userInfo } = savedUser._doc;
 
@@ -75,10 +75,15 @@ router.post('/login', async (req, res) => {
             return res.status(404).json({ message: "User not found!" });
         }
 
+        // --- NEW: Check if user is suspended
+        if (user.status === 'Suspended') {
+            return res.status(403).json({ message: "Your account is suspended. Please contact the administrator." });
+        }
+
         // 2. VERIFY PASSWORD 
         // Compare the plain text password (req.body) with the Hash (user.password)
         const isMatch = await bcrypt.compare(req.body.password, user.password);
-        
+
         if (!isMatch) {
             return res.status(400).json({ message: "Wrong password!" });
         }
@@ -90,14 +95,14 @@ router.post('/login', async (req, res) => {
 
         // 4. Generate JWT Token
         const token = jwt.sign(
-            { id: user._id, role: user.role }, 
-            process.env.JWT_SECRET || "mySuperSecretKey123", 
-            { expiresIn: "5d" } 
+            { id: user._id, role: user.role },
+            process.env.JWT_SECRET || "mySuperSecretKey123",
+            { expiresIn: "5d" }
         );
 
         // 5. Send Response (excluding password)
         const { password, ...others } = user._doc;
-        
+
         res.status(200).json({ ...others, token });
 
     } catch (err) {

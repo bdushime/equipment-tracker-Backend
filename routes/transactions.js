@@ -4,27 +4,27 @@ const Transaction = require('../models/Transaction');
 const Equipment = require('../models/Equipment');
 const User = require('../models/User');
 const AuditLog = require('../models/AuditLog');
-const Config = require('../models/Config'); 
+const Config = require('../models/Config');
 
 // 👇 IMPORT THE NOTIFICATION SERVICE
 const { sendNotification } = require('../utils/emailService');
 
 const { verifyToken } = require('../middleware/verifyToken');
-const { checkRole } = require('../middleware/checkRole'); 
+const { checkRole } = require('../middleware/checkRole');
 
-const MAX_LOAN_HOURS = 24; 
+const MAX_LOAN_HOURS = 24;
 
 // ==========================================
 // 1. Get Active Loans & Requests (For IT Staff)
 // ==========================================
 router.get('/active', verifyToken, async (req, res) => {
     try {
-        const transactions = await Transaction.find({ 
-            status: { $in: ['Pending', 'Checked Out', 'Overdue', 'Borrowed', 'Reserved'] } 
+        const transactions = await Transaction.find({
+            status: { $in: ['Pending', 'Checked Out', 'Overdue', 'Borrowed', 'Reserved'] }
         })
-        .populate('equipment', 'name serialNumber') 
-        .populate('user', 'username email responsibilityScore')
-        .sort({ createdAt: -1 });
+            .populate('equipment', 'name serialNumber')
+            .populate('user', 'username email responsibilityScore')
+            .sort({ createdAt: -1 });
 
         res.status(200).json(transactions);
     } catch (err) {
@@ -38,12 +38,12 @@ router.get('/active', verifyToken, async (req, res) => {
 // ==========================================
 router.get('/my-borrowed', verifyToken, async (req, res) => {
     try {
-        const activeTransactions = await Transaction.find({ 
-            user: req.user.id,      
-            returnTime: null        
+        const activeTransactions = await Transaction.find({
+            user: req.user.id,
+            returnTime: null
         })
-        .populate('equipment')      
-        .sort({ expectedReturnTime: 1 }); 
+            .populate('equipment')
+            .sort({ expectedReturnTime: 1 });
 
         res.status(200).json(activeTransactions);
     } catch (err) {
@@ -73,7 +73,7 @@ router.post('/checkout', verifyToken, async (req, res) => {
         // Policy Check: Duration
         const returnDate = new Date(expectedReturnTime);
         const now = new Date();
-        const hoursDifference = Math.abs(returnDate - now) / 36e5; 
+        const hoursDifference = Math.abs(returnDate - now) / 36e5;
 
         if (hoursDifference > MAX_LOAN_HOURS) {
             return res.status(400).json({ message: `Security Policy: You cannot borrow items for more than ${MAX_LOAN_HOURS} hours.` });
@@ -93,7 +93,7 @@ router.post('/checkout', verifyToken, async (req, res) => {
             expectedReturnTime: expectedReturnTime,
             destination: destination,
             purpose: purpose,
-            checkoutPhotoUrl: req.body.checkoutPhotoUrl || "", 
+            checkoutPhotoUrl: req.body.checkoutPhotoUrl || "",
             signatureUrl: req.body.signatureUrl || "",
             status: initialStatus
         });
@@ -115,7 +115,7 @@ router.post('/checkout', verifyToken, async (req, res) => {
             );
         } else {
             // STUDENT REQUEST FLOW
-            
+
             // 1. Notify the Student
             await sendNotification(
                 user._id,
@@ -128,10 +128,10 @@ router.post('/checkout', verifyToken, async (req, res) => {
 
             // 2. DEBUG & NOTIFY IT STAFF
             console.log("[DEBUG] Searching for IT Staff to notify...");
-            
+
             // Query strictly for these roles
             const staffMembers = await User.find({ role: { $in: ['IT', 'IT_Staff', 'Admin'] } });
-            
+
             console.log(`[DEBUG] Found ${staffMembers.length} staff members in DB.`);
 
             if (staffMembers.length === 0) {
@@ -143,7 +143,7 @@ router.post('/checkout', verifyToken, async (req, res) => {
                 console.log(`[DEBUG] Sending alert to: ${staff.username} (${staff.email})`);
                 await sendNotification(
                     staff._id,
-                    staff.email, 
+                    staff.email,
                     "New Borrow Request",
                     `${user.username} has requested the ${equipment.name}. Please review in Dashboard.`,
                     "warning",
@@ -177,7 +177,7 @@ router.post('/checkin', verifyToken, async (req, res) => {
         const transaction = await Transaction.findOne({
             user: targetUserId,
             equipment: equipmentId,
-            returnTime: null 
+            returnTime: null
         });
 
         if (!transaction) {
@@ -186,12 +186,12 @@ router.post('/checkin', verifyToken, async (req, res) => {
 
         // --- FETCH DYNAMIC CONFIG ---
         let config = await Config.findOne();
-        if (!config) config = new Config(); 
+        if (!config) config = new Config();
 
         transaction.returnTime = Date.now();
-        transaction.status = 'Returned'; 
-        transaction.condition = condition || "Good"; 
-        
+        transaction.status = 'Returned';
+        transaction.condition = condition || "Good";
+
         // Calculate Lateness
         const now = new Date();
         const dueDate = new Date(transaction.expectedReturnTime);
@@ -201,17 +201,17 @@ router.post('/checkin', verifyToken, async (req, res) => {
 
         const equipment = await Equipment.findById(equipmentId);
         equipment.status = 'Available';
-        equipment.condition = condition || equipment.condition; 
+        equipment.condition = condition || equipment.condition;
         await equipment.save();
 
         // Update User Score
         const user = await User.findById(targetUserId);
-        
+
         if (isLate) {
             const diffTime = Math.abs(now - dueDate);
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-            
-            const penalty = diffDays * config.latePenalty; 
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            const penalty = diffDays * config.latePenalty;
             user.responsibilityScore -= penalty;
 
             // 🔔 NOTIFY USER (Late Return)
@@ -225,7 +225,7 @@ router.post('/checkin', verifyToken, async (req, res) => {
             );
 
         } else {
-            user.responsibilityScore += 2;  
+            user.responsibilityScore += 2;
             if (user.responsibilityScore > 100) user.responsibilityScore = 100;
 
             // 🔔 NOTIFY USER (Success Return)
@@ -257,12 +257,12 @@ router.post('/checkin', verifyToken, async (req, res) => {
 // ==========================================
 router.get('/my-history', verifyToken, async (req, res) => {
     try {
-        const history = await Transaction.find({ 
-            user: req.user.id 
+        const history = await Transaction.find({
+            user: req.user.id
         })
-        .populate('equipment')
-        .sort({ updatedAt: -1 }) 
-        .limit(10); 
+            .populate('equipment')
+            .sort({ updatedAt: -1 })
+            .limit(10);
 
         res.status(200).json(history);
     } catch (err) {
@@ -278,12 +278,12 @@ router.post('/reserve', verifyToken, async (req, res) => {
         const { equipmentId, reservationDate, reservationTime, purpose, location, course } = req.body;
         const startString = `${reservationDate}T${reservationTime}:00`;
         const startTime = new Date(startString);
-        
+
         if (isNaN(startTime.getTime())) {
             return res.status(400).json({ message: "Invalid date or time format." });
         }
 
-        const endTime = new Date(startTime.getTime() + 2 * 60 * 60 * 1000); 
+        const endTime = new Date(startTime.getTime() + 2 * 60 * 60 * 1000);
 
         if (startTime < new Date()) {
             return res.status(400).json({ message: "Cannot reserve for a past date/time." });
@@ -310,7 +310,7 @@ router.post('/reserve', verifyToken, async (req, res) => {
             expectedReturnTime: endTime,
             destination: `${location} (${course})`,
             purpose: purpose,
-            status: 'Reserved' 
+            status: 'Reserved'
         });
 
         await newReservation.save();
@@ -341,7 +341,7 @@ router.post('/reserve', verifyToken, async (req, res) => {
 // ==========================================
 router.put('/:id/respond', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), async (req, res) => {
     try {
-        const { action } = req.body; 
+        const { action } = req.body;
         // 👇 POPULATE USER TO GET EMAIL
         const transaction = await Transaction.findById(req.params.id).populate('user').populate('equipment');
 
@@ -351,11 +351,11 @@ router.put('/:id/respond', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), 
             const now = new Date();
             const requestTime = new Date(transaction.createdAt);
             const originalDue = new Date(transaction.expectedReturnTime);
-            
-            let durationInMillis = originalDue - requestTime;
-            if (durationInMillis < 0) durationInMillis = 2 * 60 * 60 * 1000; 
 
-            transaction.checkoutTime = now; 
+            let durationInMillis = originalDue - requestTime;
+            if (durationInMillis < 0) durationInMillis = 2 * 60 * 60 * 1000;
+
+            transaction.checkoutTime = now;
             transaction.expectedReturnTime = new Date(now.getTime() + durationInMillis);
             transaction.status = 'Checked Out';
 
@@ -374,13 +374,13 @@ router.put('/:id/respond', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), 
                 "success",
                 transaction._id
             );
-            
+
         } else if (action === 'Deny') {
             transaction.status = 'Denied';
             const equipment = await Equipment.findById(transaction.equipment._id);
-            if(equipment && equipment.status !== 'Available') {
-                 equipment.status = 'Available';
-                 await equipment.save();
+            if (equipment && equipment.status !== 'Available') {
+                equipment.status = 'Available';
+                await equipment.save();
             }
 
             // 🔔 NOTIFY USER (Denied)
@@ -450,8 +450,8 @@ router.post('/cancel/:id', verifyToken, async (req, res) => {
 router.get('/all-history', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), async (req, res) => {
     try {
         const transactions = await Transaction.find()
-            .populate('user', 'username email responsibilityScore') 
-            .populate('equipment', 'name serialNumber category status') 
+            .populate('user', 'username email responsibilityScore')
+            .populate('equipment', 'name serialNumber category status')
             .sort({ createdAt: -1 });
 
         res.status(200).json(transactions);
@@ -468,7 +468,7 @@ router.get('/security/dashboard-stats', verifyToken, async (req, res) => {
     try {
         const activeCount = await Transaction.countDocuments({ status: 'Checked Out' });
         const overdueCount = await Transaction.countDocuments({ status: 'Overdue' });
-        
+
         const sixMonthsAgo = new Date();
         sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
@@ -477,11 +477,11 @@ router.get('/security/dashboard-stats', verifyToken, async (req, res) => {
             {
                 $group: {
                     _id: { $month: "$createdAt" },
-                    checkouts: { 
-                        $sum: { $cond: [{ $in: ["$status", ["Checked Out", "Returned", "Overdue"]] }, 1, 0] } 
+                    checkouts: {
+                        $sum: { $cond: [{ $in: ["$status", ["Checked Out", "Returned", "Overdue"]] }, 1, 0] }
                     },
-                    overdue: { 
-                        $sum: { $cond: [{ $eq: ["$status", "Overdue"] }, 1, 0] } 
+                    overdue: {
+                        $sum: { $cond: [{ $eq: ["$status", "Overdue"] }, 1, 0] }
                     }
                 }
             },
@@ -492,7 +492,7 @@ router.get('/security/dashboard-stats', verifyToken, async (req, res) => {
         const trendData = rawTrend.map(item => ({
             name: monthNames[item._id - 1],
             checkouts: item.checkouts,
-            failed: item.overdue 
+            failed: item.overdue
         }));
 
         const equipmentStats = await Transaction.aggregate([
@@ -510,7 +510,7 @@ router.get('/security/dashboard-stats', verifyToken, async (req, res) => {
         const formattedEqStats = equipmentStats.map(item => ({
             name: item._id || "Uncategorized",
             value: item.value,
-            color: "#" + Math.floor(Math.random()*16777215).toString(16) 
+            color: "#" + Math.floor(Math.random() * 16777215).toString(16)
         }));
 
         res.status(200).json({
@@ -560,8 +560,8 @@ router.get('/admin/dashboard-stats', verifyToken, checkRole(['Admin']), async (r
     try {
         const totalUsers = await User.countDocuments();
         const activeUsers = await Transaction.distinct('user', { status: 'Checked Out' });
-        const lowScoreUsers = await User.countDocuments({ responsibilityScore: { $lt: 50 } }); 
-        
+        const lowScoreUsers = await User.countDocuments({ responsibilityScore: { $lt: 50 } });
+
         const totalEquipment = await Equipment.countDocuments();
         const availableEquipment = await Equipment.countDocuments({ status: 'Available' });
         const atRiskItems = await Transaction.countDocuments({ status: 'Overdue' });
@@ -599,21 +599,21 @@ router.get('/admin/dashboard-stats', verifyToken, checkRole(['Admin']), async (r
 router.get('/admin/snapshots', verifyToken, checkRole(['Admin']), async (req, res) => {
     try {
         const maintenanceCount = await Equipment.countDocuments({ status: { $in: ['Maintenance', 'Damaged'] } });
-        
+
         let config = await Config.findOne();
-        if (!config) config = new Config(); 
+        if (!config) config = new Config();
 
         const configWarnings = config.maintenanceMode ? 1 : 0;
 
         const health = {
             uptime: "99.98%",
-            storage: "45%", 
-            lastBackup: new Date(Date.now() - 1000 * 60 * 120) 
+            storage: "45%",
+            lastBackup: new Date(Date.now() - 1000 * 60 * 120)
         };
 
         res.status(200).json({
             attention: {
-                sensors: 0, 
+                sensors: 0,
                 maintenance: maintenanceCount,
                 warnings: configWarnings
             },
