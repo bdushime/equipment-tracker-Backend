@@ -5,7 +5,12 @@ const verifyToken = (req, res, next) => {
 
     if (authHeader) {
     
-        const token = authHeader.split(" ")[1]; 
+        // Accept both:
+        // - "Bearer <token>" (standard Authorization header)
+        // - "<token>" (some clients send raw token)
+        const token = authHeader.startsWith('Bearer ')
+            ? authHeader.split(' ')[1]
+            : authHeader.trim();
 
         jwt.verify(token, process.env.JWT_SECRET || "mySuperSecretKey123", (err, user) => {
             if (err) {

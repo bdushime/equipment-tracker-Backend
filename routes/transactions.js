@@ -556,7 +556,7 @@ router.get('/security/dashboard-stats', verifyToken, async (req, res) => {
             } },
             { $sort: { "_id": 1 } }
         ]);
-        
+        P
         const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
         const trendData = rawTrend.map(item => ({ 
             name: monthNames[item._id - 1], 

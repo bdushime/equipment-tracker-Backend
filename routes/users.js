@@ -24,7 +24,12 @@ router.get('/', verifyToken, checkRole(['Admin']), async (req, res) => {
             User.countDocuments()
         ]);
 
-        res.status(200).json({
+        // Back-compat: if frontend expects an array, it can call `/api/users?raw=true`
+        if (String(req.query.raw).toLowerCase() === 'true') {
+            return res.status(200).json(users);
+        }
+
+        return res.status(200).json({
             items: users,
             page,
             limit,

@@ -329,7 +329,12 @@ router.get('/browse', async (req, res) => {
             Equipment.countDocuments(query)
         ]);
 
-        res.status(200).json({
+        // Back-compat: if frontend expects an array, it can call `/api/equipment/browse?raw=true`
+        if (String(req.query.raw).toLowerCase() === 'true') {
+            return res.status(200).json(items);
+        }
+
+        return res.status(200).json({
             items,
             page,
             limit,
@@ -357,7 +362,12 @@ router.get('/', async (req, res) => {
             Equipment.countDocuments()
         ]);
 
-        res.status(200).json({
+        // Back-compat: if frontend expects an array, it can call `/api/equipment?raw=true`
+        if (String(req.query.raw).toLowerCase() === 'true') {
+            return res.status(200).json(items);
+        }
+
+        return res.status(200).json({
             items,
             page,
             limit,
