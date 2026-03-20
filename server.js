@@ -21,6 +21,7 @@ const notificationRoute = require('./routes/notifications');
 const iotRoute = require('./routes/iot');
 const classroomRoute = require('./routes/classrooms');
 const courseRoute = require('./routes/courses');
+const rolesRoute = require('./routes/roles');
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
@@ -57,32 +58,9 @@ app.use('/api/monitoring', require('./routes/monitoring'));
 app.use('/api/config', require('./routes/config'));
 app.use('/api/notifications', notificationRoute);
 app.use('/api/courses', courseRoute);
+app.use('/api/roles', rolesRoute);
 
-// Checkout route to handle multiple file uploads
-app.post('/api/transactions/checkout', upload.array('checkoutPhotos', 10), async (req, res) => {
-    try {
-        const transactionData = {
-            user: req.body.user,
-            equipment: req.body.equipment,
-            startTime: req.body.startTime ? new Date(req.body.startTime) : Date.now(),
-            expectedReturnTime: req.body.expectedReturnTime ? new Date(req.body.expectedReturnTime) : null,
-            destination: req.body.destination,
-            purpose: req.body.purpose,
-            status: req.body.status || 'Borrowed',
-            checkoutPhotoUrls: req.files.map(file => `/uploads/${file.filename}`)
-        };
-
-        // Save the transaction (adjust according to your model)
-        const Transaction = require('./models/Transaction');
-        const transaction = new Transaction(transactionData);
-        await transaction.save();
-
-        res.status(201).json(transaction);
-    } catch (error) {
-        console.error('Error during checkout:', error);
-        res.status(500).send('Internal Server Error');
-    }
-});
+// Checkout route handled in routes/transactions.js using the transactions router.
 
 const connectDB = async () => {
     try {
