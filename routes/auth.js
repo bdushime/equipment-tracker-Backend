@@ -3,9 +3,11 @@ const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
+// ==========================================
 // @route   POST /api/auth/register
 // @desc    Register a new user (Secure + Validated)
 // @access  Public
+// ==========================================
 router.post('/register', async (req, res) => {
     try {
         const { username, email, password, studentId } = req.body;
@@ -24,28 +26,32 @@ router.post('/register', async (req, res) => {
             return res.status(400).json({ message: "Invalid email format." });
         }
 
-        // --- 2. DUPLICATE CHECK ---
-        const checkCriteria = [
-            { email: email },
-            { username: username }
-        ];
-
-        if (studentId) {
-            checkCriteria.push({ studentId: studentId });
+        // --- 2. DUPLICATE CHECK (UPDATED: Specific Error Messages) ---
+        
+        // Check Email
+        const existingEmail = await User.findOne({ email: email });
+        if (existingEmail) {
+            return res.status(400).json({ message: "This Email address is already registered!" });
         }
 
-        // Use $or to find if ANY of these match
-        const existingUser = await User.findOne({
-            $or: checkCriteria
-        });
+        // Check Username
+        const existingUsername = await User.findOne({ username: username });
+        if (existingUsername) {
+            return res.status(400).json({ message: "This Username is already taken!" });
+        }
 
-        if (existingUser) {
-            return res.status(400).json({ message: "User already exists (Email, Username, or Student ID)!" });
+        // Check Student ID (if provided)
+        if (studentId) {
+            const existingStudentId = await User.findOne({ studentId: studentId });
+            if (existingStudentId) {
+                return res.status(400).json({ message: "This Student ID is already in use!" });
+            }
         }
 
         // --- 3. CREATE USER ---
         const newUser = new User(req.body);
         const savedUser = await newUser.save();
+        
         // Remove password from the response for security
         const { password: _, ...userInfo } = savedUser._doc;
 
@@ -57,9 +63,11 @@ router.post('/register', async (req, res) => {
     }
 });
 
+// ==========================================
 // @route   POST /api/auth/login
 // @desc    Login user & get token
 // @access  Public
+// ==========================================
 router.post('/login', async (req, res) => {
     try {
         // 1. Find User by Email
