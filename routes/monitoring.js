@@ -2,11 +2,12 @@ const express = require('express');
 const router = express.Router();
 const Equipment = require('../models/Equipment');
 const { verifyToken } = require('../middleware/verifyToken');
+const { checkRole } = require('../middleware/checkRole');
 
 // ==========================================
 // 1. GET IoT DASHBOARD DATA (Calculates Online/Offline)
 // ==========================================
-router.get('/live', verifyToken, async (req, res) => {
+router.get('/live', verifyToken, checkRole(['Security', 'Admin']), async (req, res) => {
     try {
         // Find ALL equipment that has an iotTag
         const trackers = await Equipment.find({ 
@@ -60,7 +61,7 @@ router.get('/live', verifyToken, async (req, res) => {
 // ==========================================
 // 2. SIMULATE HEARTBEAT (Targeting TRACK_TEST_001)
 // ==========================================
-router.post('/simulate', verifyToken, async (req, res) => {
+router.post('/simulate', verifyToken, checkRole(['Security', 'Admin']), async (req, res) => {
     try {
         console.log("[DEBUG] Simulation Requested...");
 
