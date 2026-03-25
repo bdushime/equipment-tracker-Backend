@@ -59,6 +59,7 @@ app.use('/api/config', require('./routes/config'));
 app.use('/api/notifications', notificationRoute);
 app.use('/api/courses', courseRoute);
 app.use('/api/roles', rolesRoute);
+app.use('/api/iot', iotRoute);
 
 // Checkout route handled in routes/transactions.js using the transactions router.
 
