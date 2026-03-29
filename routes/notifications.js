@@ -106,7 +106,7 @@ router.put('/mark-all-read', verifyToken, async (req, res) => {
 });
 
 // ==========================================
-// 5. CONTACT ALL ADMINS (For Staff/Users to Reply) <-- NEW FEATURE
+// 5. CONTACT ALL ADMINS (For Staff/Users to Reply) 
 // ==========================================
 router.post('/contact-admins', verifyToken, async (req, res) => {
     try {
