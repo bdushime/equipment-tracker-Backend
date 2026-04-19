@@ -104,8 +104,6 @@ router.put('/:id', verifyToken, async (req, res) => {
             updateData.fullName = `${updateData.firstName} ${updateData.lastName}`;
         }
 
-        // If they provided a new password, we must fetch the user and use .save() 
-        // instead of findByIdAndUpdate so the Mongoose pre-save hook hashes it correctly!
         if (updateData.password && updateData.password.trim() !== "") {
             const userToUpdate = await User.findById(req.params.id);
             
@@ -113,17 +111,13 @@ router.put('/:id', verifyToken, async (req, res) => {
                 return res.status(404).json({ message: "User not found" });
             }
 
-            // Manually apply all updates to the user document
-            Object.assign(userToUpdate, updateData);
+            // 👇 THE FIX: Use Mongoose's .set() method instead of Object.assign
+            userToUpdate.set(updateData);
             
-            // Saving it this way triggers your User.js schema's password hashing automatically!
             const updatedUser = await userToUpdate.save();
             return res.status(200).json(updatedUser);
         } 
-        
-        // If NO password was provided, we can use the faster findByIdAndUpdate
         else {
-            // Remove password from updateData just in case it's an empty string
             delete updateData.password; 
 
             const updatedUser = await User.findByIdAndUpdate(
@@ -135,6 +129,7 @@ router.put('/:id', verifyToken, async (req, res) => {
         }
 
     } catch (err) {
+        // 👇 This console.log is our safety net!
         console.error("User Update Error:", err);
         res.status(500).json({ message: "Failed to update user", error: err.message });
     }
