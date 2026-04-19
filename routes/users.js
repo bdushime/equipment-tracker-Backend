@@ -4,6 +4,8 @@ const User = require('../models/User');
 const { verifyToken } = require('../middleware/verifyToken');
 const { checkRole } = require('../middleware/checkRole'); // 👇 IMPORT THIS
 
+const bcrypt = require('bcryptjs');
+
 // ==========================================
 // 1. ADMIN ROUTES (Manage Users)
 // ==========================================
@@ -104,33 +106,31 @@ router.put('/:id', verifyToken, async (req, res) => {
             updateData.fullName = `${updateData.firstName} ${updateData.lastName}`;
         }
 
+        // If a new password is provided, manually hash it right here
         if (updateData.password && updateData.password.trim() !== "") {
-            const userToUpdate = await User.findById(req.params.id);
-            
-            if (!userToUpdate) {
-                return res.status(404).json({ message: "User not found" });
-            }
-
-            // 👇 THE FIX: Use Mongoose's .set() method instead of Object.assign
-            userToUpdate.set(updateData);
-            
-            const updatedUser = await userToUpdate.save();
-            return res.status(200).json(updatedUser);
-        } 
-        else {
+            const salt = await bcrypt.genSalt(10);
+            updateData.password = await bcrypt.hash(updateData.password, salt);
+        } else {
+            // If left blank, remove it so we don't accidentally overwrite with empty string
             delete updateData.password; 
-
-            const updatedUser = await User.findByIdAndUpdate(
-                req.params.id,
-                { $set: updateData },
-                { new: true }
-            );
-            return res.status(200).json(updatedUser);
         }
 
+        // Force the update directly into the database, bypassing strict model validation hooks
+        const updatedUser = await User.findByIdAndUpdate(
+            req.params.id,
+            { $set: updateData },
+            { new: true }
+        );
+
+        if (!updatedUser) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        return res.status(200).json(updatedUser);
+
     } catch (err) {
-        // 👇 This console.log is our safety net!
         console.error("User Update Error:", err);
+        // I added the exact error message to the response so your frontend can see it!
         res.status(500).json({ message: "Failed to update user", error: err.message });
     }
 });
