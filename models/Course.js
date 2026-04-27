@@ -1,10 +1,11 @@
 const mongoose = require('mongoose');
 
-const courseSchema = new mongoose.Schema({
+const CourseSchema = new mongoose.Schema({
     code: {
         type: String,
         required: true,
         unique: true,
+        uppercase: true,
         trim: true
     },
     name: {
@@ -15,11 +16,7 @@ const courseSchema = new mongoose.Schema({
     description: {
         type: String,
         trim: true
-    },
-    createdAt: {
-        type: Date,
-        default: Date.now
     }
 }, { timestamps: true });
 
-module.exports = mongoose.model('Course', courseSchema);
+module.exports = mongoose.model('Course', CourseSchema);

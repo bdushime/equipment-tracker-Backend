@@ -9,7 +9,7 @@ const { checkRole } = require('../middleware/checkRole');
 // ==========================================
 router.get('/', verifyToken, async (req, res) => {
     try {
-        const courses = await Course.find().sort({ code: 1 }); // Sort by code
+        const courses = await Course.find().collation({ locale: 'en', strength: 2 }).sort({ name: 1 });
         res.status(200).json(courses);
     } catch (err) {
         console.error("Fetch Courses Error:", err);
@@ -25,7 +25,7 @@ router.post('/', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), async (req
         const { code, name, description } = req.body;
 
         // Check for duplicates
-        const existingCourse = await Course.findOne({ code });
+        const existingCourse = await Course.findOne({ code: code.toUpperCase() });
         if (existingCourse) {
             return res.status(400).json({ message: "Course with this code already exists" });
         }
@@ -47,7 +47,7 @@ router.put('/:id', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), async (r
         const updatedCourse = await Course.findByIdAndUpdate(
             req.params.id,
             { $set: req.body },
-            { new: true } // Return the updated document
+            { new: true }
         );
         res.status(200).json(updatedCourse);
     } catch (err) {

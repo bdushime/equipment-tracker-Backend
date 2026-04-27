@@ -3,8 +3,8 @@ const router = express.Router();
 const Notification = require('../models/Notification');
 const User = require('../models/User'); // 👈 Imported User model
 const { verifyToken } = require('../middleware/verifyToken');
-const { checkRole } = require('../middleware/checkRole'); // 👈 Imported checkRole
-const { sendNotification } = require('../utils/emailService'); // 👈 Imported Email Service
+const { checkRole } = require('../middleware/checkRole');
+const { sendNotification } = require('../utils/emailService');
 
 // ==========================================
 // 1. SEND NOTIFICATION (Admin/IT -> User)
@@ -27,7 +27,7 @@ router.post('/send-to-user', verifyToken, checkRole(['Admin', 'IT_Staff']), asyn
         // 3. Save to Database (So it appears in their notification bell)
         // We use 'recipient' to match your existing schema
         const newNotification = new Notification({
-            recipient: userId, 
+            recipient: userId,
             title: title,
             message: message,
             type: type || 'info',
@@ -59,8 +59,7 @@ router.post('/send-to-user', verifyToken, checkRole(['Admin', 'IT_Staff']), asyn
 router.get('/', verifyToken, async (req, res) => {
     try {
         const notes = await Notification.find({ recipient: req.user.id })
-            .sort({ createdAt: -1 })
-            .limit(20);
+            .sort({ createdAt: -1 });
         res.status(200).json(notes);
     } catch (err) {
         res.status(500).json(err);
@@ -68,7 +67,19 @@ router.get('/', verifyToken, async (req, res) => {
 });
 
 // ==========================================
-// 3. Mark Single as Read
+// 3. Get Unread Count
+// ==========================================
+router.get('/unread-count', verifyToken, async (req, res) => {
+    try {
+        const count = await Notification.countDocuments({ recipient: req.user.id, read: false });
+        res.status(200).json({ count });
+    } catch (err) {
+        res.status(500).json(err);
+    }
+});
+
+// ==========================================
+// 4. Mark Single as Read
 // ==========================================
 router.put('/:id/read', verifyToken, async (req, res) => {
     try {
@@ -95,7 +106,7 @@ router.put('/mark-all-read', verifyToken, async (req, res) => {
 });
 
 // ==========================================
-// 5. CONTACT ALL ADMINS (For Staff/Users to Reply) <-- NEW FEATURE
+// 5. CONTACT ALL ADMINS (For Staff/Users to Reply) 
 // ==========================================
 router.post('/contact-admins', verifyToken, async (req, res) => {
     try {
@@ -142,6 +153,31 @@ router.post('/contact-admins', verifyToken, async (req, res) => {
 
     } catch (err) {
         console.error("Contact Admin Error:", err);
+        res.status(500).json({ message: "Server Error" });
+    }
+});
+
+// NEW: Handle system-generated notifications (from IoT offline events)
+router.post('/', verifyToken, async (req, res) => {
+    try {
+        const { title, message, type, relatedId } = req.body;
+
+        // Save notification (recipient can be current user or based on your logic)
+        const newNotification = new Notification({
+            title,
+            message,
+            type: type || 'info',
+            recipient: req.user.id, // adjust if you want to send to a specific role
+            relatedId: relatedId || null,
+            read: false
+        });
+
+        await newNotification.save();
+
+        res.status(200).json({ message: "Notification saved successfully" });
+
+    } catch (err) {
+        console.error("Notification Save Error:", err);
         res.status(500).json({ message: "Server Error" });
     }
 });

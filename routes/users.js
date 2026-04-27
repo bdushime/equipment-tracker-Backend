@@ -1,8 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
-const { verifyToken } = require('../middleware/verifyToken'); 
+const { verifyToken } = require('../middleware/verifyToken');
 const { checkRole } = require('../middleware/checkRole'); // 👇 IMPORT THIS
+
+const bcrypt = require('bcryptjs');
 
 // ==========================================
 // 1. ADMIN ROUTES (Manage Users)
@@ -62,7 +64,7 @@ router.post('/', verifyToken, checkRole(['Admin']), async (req, res) => {
         });
 
         const savedUser = await newUser.save();
-        
+
         // Remove password before sending back
         const { password, ...others } = savedUser._doc;
         res.status(201).json(others);
@@ -80,7 +82,7 @@ router.post('/', verifyToken, checkRole(['Admin']), async (req, res) => {
 router.get('/profile', verifyToken, async (req, res) => {
     try {
         const user = await User.findById(req.user.id);
-        
+
         if (!user) {
             return res.status(404).json({ message: "User not found" });
         }
@@ -104,14 +106,39 @@ router.put('/:id', verifyToken, async (req, res) => {
     }
 
     try {
+        let updateData = { ...req.body };
+
+        // Handle frontend splitting firstName/lastName
+        if (updateData.firstName && updateData.lastName) {
+            updateData.fullName = `${updateData.firstName} ${updateData.lastName}`;
+        }
+
+        // If a new password is provided, manually hash it right here
+        if (updateData.password && updateData.password.trim() !== "") {
+            const salt = await bcrypt.genSalt(10);
+            updateData.password = await bcrypt.hash(updateData.password, salt);
+        } else {
+            // If left blank, remove it so we don't accidentally overwrite with empty string
+            delete updateData.password; 
+        }
+
+        // Force the update directly into the database, bypassing strict model validation hooks
         const updatedUser = await User.findByIdAndUpdate(
             req.params.id,
-            { $set: req.body },
+            { $set: updateData },
             { new: true }
         );
-        res.status(200).json(updatedUser);
+
+        if (!updatedUser) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        return res.status(200).json(updatedUser);
+
     } catch (err) {
-        res.status(500).json(err);
+        console.error("User Update Error:", err);
+        // I added the exact error message to the response so your frontend can see it!
+        res.status(500).json({ message: "Failed to update user", error: err.message });
     }
 });
 

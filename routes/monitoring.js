@@ -10,12 +10,12 @@ const { checkRole } = require('../middleware/checkRole');
 router.get('/live', verifyToken, checkRole(['Security', 'Admin']), async (req, res) => {
     try {
         // Find ALL equipment that has an iotTag
-        const trackers = await Equipment.find({ 
-            iotTag: { $exists: true, $ne: null } 
+        const trackers = await Equipment.find({
+            iotTag: { $exists: true, $ne: null }
         });
 
         const now = new Date();
-        const THRESHOLD_MINUTES = 5; 
+        const THRESHOLD_MINUTES = 5;
 
         const stats = {
             total: trackers.length,
@@ -28,10 +28,10 @@ router.get('/live', verifyToken, checkRole(['Security', 'Admin']), async (req, r
             // Logic: If lastSeen is missing, default to 1970 (Offline)
             const lastPing = t.lastSeen ? new Date(t.lastSeen) : new Date(0);
             const diffMinutes = (now - lastPing) / 1000 / 60;
-            
+
             // Logic: < 5 minutes = ONLINE
             const isOnline = diffMinutes < THRESHOLD_MINUTES;
-            
+
             if (isOnline) stats.online++;
             else stats.offline++;
 
@@ -45,7 +45,9 @@ router.get('/live', verifyToken, checkRole(['Security', 'Admin']), async (req, r
                 battery: battery,
                 location: t.location || "Unknown",
                 // Ensure we send coordinates for the Map
-                geoCoordinates: t.geoCoordinates || { lat: -1.9441, lng: 30.0619 },
+                coords: (t.geoCoordinates && t.geoCoordinates.lat && t.geoCoordinates.lng)
+                    ? { lat: t.geoCoordinates.lat, lng: t.geoCoordinates.lng }
+                    : { lat: -1.9441, lng: 30.0619 }, // Default fallback if missing
                 lastSeen: t.lastSeen
             };
         });
@@ -82,20 +84,20 @@ router.post('/simulate', verifyToken, checkRole(['Security', 'Admin']), async (r
 
         // 3. FORCE UPDATE "lastSeen" to NOW
         tracker.lastSeen = new Date();
-        
+
         // 4. Update Battery & Location (Mocking movement)
-        tracker.batteryLevel = 95; 
+        tracker.batteryLevel = 95;
         tracker.location = "Active Transit (Simulated)";
-        tracker.geoCoordinates = { 
-            lat: -1.9441 + (Math.random() * 0.001), 
-            lng: 30.0619 + (Math.random() * 0.001) 
+        tracker.geoCoordinates = {
+            lat: -1.9441 + (Math.random() * 0.001),
+            lng: 30.0619 + (Math.random() * 0.001)
         };
 
         // 5. CRITICAL: Save to DB
         await tracker.save();
 
         console.log("[DEBUG] Update Saved. New Time:", tracker.lastSeen);
-        
+
         res.status(200).json({ message: "Simulation successful", tracker });
 
     } catch (err) {

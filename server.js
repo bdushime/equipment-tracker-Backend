@@ -5,9 +5,10 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
+const startIoTCheck = require('./utils/iotCheck');
 
 // Import your routes
-const equipmentRoute = require('./routes/equipment');
+const equipmentRoute = require('./routes/equipments');
 const authRoute = require('./routes/auth');
 const userRoute = require('./routes/users');
 const transactionRoute = require('./routes/transactions');
@@ -20,6 +21,8 @@ const notificationRoute = require('./routes/notifications');
 const iotRoute = require('./routes/iot');
 const classroomRoute = require('./routes/classrooms');
 const courseRoute = require('./routes/courses');
+const rolesRoute = require('./routes/roles');
+const packageRoute = require('./routes/packages');
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
@@ -56,61 +59,12 @@ app.use('/api/monitoring', require('./routes/monitoring'));
 app.use('/api/config', require('./routes/config'));
 app.use('/api/notifications', notificationRoute);
 app.use('/api/classrooms', classroomRoute);
-app.use('/api/iot', iotRoute);
-app.use('/api/classrooms', classroomRoute);
 app.use('/api/courses', courseRoute);
+app.use('/api/roles', rolesRoute);
+app.use('/api/iot', iotRoute);
+app.use('/api/packages', packageRoute);
 
-// Checkout route to handle multiple file uploads
-app.post('/api/transactions/checkout', upload.array('checkoutPhotos', 10), async (req, res) => {
-    try {
-        const transactionData = {
-            user: req.body.user,
-            equipment: req.body.equipment,
-            startTime: req.body.startTime ? new Date(req.body.startTime) : Date.now(),
-            expectedReturnTime: req.body.expectedReturnTime ? new Date(req.body.expectedReturnTime) : null,
-            destination: req.body.destination,
-            purpose: req.body.purpose,
-            status: req.body.status || 'Borrowed',
-            checkoutPhotoUrls: req.files.map(file => `/uploads/${file.filename}`)
-        };
-
-        // Save the transaction (adjust according to your model)
-        const Transaction = require('./models/Transaction');
-        const transaction = new Transaction(transactionData);
-        await transaction.save();
-
-        res.status(201).json(transaction);
-    } catch (error) {
-        console.error('Error during checkout:', error);
-        res.status(500).send('Internal Server Error');
-    }
-});
-
-// Checkout route to handle multiple file uploads
-app.post('/api/transactions/checkout', upload.array('checkoutPhotos', 10), async (req, res) => {
-    try {
-        const transactionData = {
-            user: req.body.user,
-            equipment: req.body.equipment,
-            startTime: req.body.startTime ? new Date(req.body.startTime) : Date.now(),
-            expectedReturnTime: req.body.expectedReturnTime ? new Date(req.body.expectedReturnTime) : null,
-            destination: req.body.destination,
-            purpose: req.body.purpose,
-            status: req.body.status || 'Borrowed',
-            checkoutPhotoUrls: req.files.map(file => `/uploads/${file.filename}`)
-        };
-
-        // Save the transaction (adjust according to your model)
-        const Transaction = require('./models/Transaction');
-        const transaction = new Transaction(transactionData);
-        await transaction.save();
-
-        res.status(201).json(transaction);
-    } catch (error) {
-        console.error('Error during checkout:', error);
-        res.status(500).send('Internal Server Error');
-    }
-});
+// Checkout route handled in routes/transactions.js using the transactions router.
 
 const connectDB = async () => {
     try {
@@ -128,6 +82,9 @@ app.get('/', (req, res) => {
 
 // Start overdue check if applicable
 startOverdueCheck();
+startIoTCheck(); // Start IoT Monitoring
+
+// ... (rest of the file)
 
 const PORT = process.env.PORT || 5001;
 connectDB().then(() => {

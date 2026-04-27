@@ -3,9 +3,11 @@ const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
+// ==========================================
 // @route   POST /api/auth/register
 // @desc    Register a new user (Secure + Validated)
 // @access  Public
+// ==========================================
 router.post('/register', async (req, res) => {
     try {
         const { username, email, password, studentId } = req.body;
@@ -24,28 +26,33 @@ router.post('/register', async (req, res) => {
             return res.status(400).json({ message: "Invalid email format." });
         }
 
-        // --- 2. DUPLICATE CHECK ---
-        const checkCriteria = [
-            { email: email }, 
-            { username: username }
-        ];
-
-        if (studentId) {
-            checkCriteria.push({ studentId: studentId });
+        // --- 2. DUPLICATE CHECK (UPDATED: Specific Error Messages) ---
+        
+        // Check Email
+        const existingEmail = await User.findOne({ email: email });
+        if (existingEmail) {
+            return res.status(400).json({ message: "This Email address is already registered!" });
         }
 
-        const existingUser = await User.findOne({ 
-            $or: checkCriteria 
-        });
-        
-        if (existingUser) {
-            return res.status(400).json({ message: "User already exists (Email, Username, or Student ID)!" });
+        // Check Username
+        const existingUsername = await User.findOne({ username: username });
+        if (existingUsername) {
+            return res.status(400).json({ message: "This Username is already taken!" });
+        }
+
+        // Check Student ID (if provided)
+        if (studentId) {
+            const existingStudentId = await User.findOne({ studentId: studentId });
+            if (existingStudentId) {
+                return res.status(400).json({ message: "This Student ID is already in use!" });
+            }
         }
 
         // --- 3. CREATE USER ---
         const newUser = new User(req.body);
         const savedUser = await newUser.save();
         
+        // Remove password from the response for security
         const { password: _, ...userInfo } = savedUser._doc;
 
         res.status(201).json(userInfo);
@@ -56,9 +63,11 @@ router.post('/register', async (req, res) => {
     }
 });
 
+// ==========================================
 // @route   POST /api/auth/login
 // @desc    Login user & get token
 // @access  Public
+// ==========================================
 router.post('/login', async (req, res) => {
     try {
         const { loginId, email, studentId, password: inputPassword } = req.body;
@@ -80,27 +89,45 @@ router.post('/login', async (req, res) => {
             return res.status(404).json({ message: "User not found!" });
         }
 
-        // 2. VERIFY PASSWORD 
+        // --- NEW: Check if user is suspended
+        if (user.status === 'Suspended') {
+            return res.status(403).json({ message: "Your account is suspended. Please contact the administrator." });
+        }
+
+        // 2. VERIFY PASSWORD
         const isMatch = await bcrypt.compare(inputPassword, user.password);
-        
         if (!isMatch) {
             return res.status(400).json({ message: "Invalid credentials!" });
         }
 
         // 3. Update Last Login
         user.lastLogin = new Date();
+        // Capture Device Info from User Agent
+        const ua = req.headers['user-agent'] || "";
+        if (ua.includes('Mobi') && !ua.includes('Tablet')) {
+            user.lastDevice = "Mobile Device";
+        } else if (ua.includes('Tablet') || ua.includes('iPad')) {
+            user.lastDevice = "Tablet Browser";
+        } else {
+            user.lastDevice = "Desktop Browser";
+        }
+
+        user.lastIp = req.ip || "10.0.0.X";
+        user.lastLocation = "Kigali, RW"; // Default for now
+
+        console.log(`[LOGIN] User: ${user.username}, Device: ${user.lastDevice}, UA: ${ua.substring(0, 50)}...`);
         await user.save();
 
         // 4. Generate JWT Token (SESSION MANAGEMENT UPDATE)
         const token = jwt.sign(
-            { id: user._id, role: user.role, mustChangePassword: user.mustChangePassword }, 
-            process.env.JWT_SECRET || "mySuperSecretKey123", 
-            { expiresIn: "7m" } //  CHANGED: Session now expires in 7 minutes
+            { id: user._id, role: user.role, mustChangePassword: user.mustChangePassword },
+            process.env.JWT_SECRET || "mySuperSecretKey123",
+            { expiresIn: "7m" } // CHANGED: Session now expires in 7 minutes
         );
 
         // 5. Send Response (excluding password)
         const { password: _password, ...others } = user._doc;
-        
+
         res.status(200).json({ ...others, token, mustChangePassword: !!user.mustChangePassword });
 
     } catch (err) {

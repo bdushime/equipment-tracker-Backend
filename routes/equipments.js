@@ -130,7 +130,7 @@ router.post('/bulk', verifyToken, checkRole(['IT', 'Admin', 'Security']), async 
             totalProcessed: devices.length
         };
 
-        // Process each device
+        // Process each devic
         for (let i = 0; i < devices.length; i++) {
             const device = { ...devices[i] };
             const rowNumber = i + 1;
@@ -329,13 +329,23 @@ router.get('/browse', async (req, res) => {
             Equipment.countDocuments(query)
         ]);
 
+        // Flatten coordinates here too
+        const responseItems = items.map(item => {
+            const doc = item.toObject();
+            if (doc.geoCoordinates && doc.geoCoordinates.lat && doc.geoCoordinates.lng) {
+                doc.lat = doc.geoCoordinates.lat;
+                doc.lng = doc.geoCoordinates.lng;
+            }
+            return doc;
+        });
+
         // Back-compat: if frontend expects an array, it can call `/api/equipment/browse?raw=true`
         if (String(req.query.raw).toLowerCase() === 'true') {
-            return res.status(200).json(items);
+            return res.status(200).json(responseItems);
         }
 
-        return res.status(200).json({
-            items,
+        res.status(200).json({
+            items: responseItems,
             page,
             limit,
             total,
@@ -362,13 +372,23 @@ router.get('/', async (req, res) => {
             Equipment.countDocuments()
         ]);
 
+        // Flatten coordinates for frontend compatibility
+        const responseItems = items.map(item => {
+            const doc = item.toObject(); // Convert to plain object
+            if (doc.geoCoordinates && doc.geoCoordinates.lat && doc.geoCoordinates.lng) {
+                doc.lat = doc.geoCoordinates.lat;
+                doc.lng = doc.geoCoordinates.lng;
+            }
+            return doc;
+        });
+
         // Back-compat: if frontend expects an array, it can call `/api/equipment?raw=true`
         if (String(req.query.raw).toLowerCase() === 'true') {
-            return res.status(200).json(items);
+            return res.status(200).json(responseItems);
         }
 
-        return res.status(200).json({
-            items,
+        res.status(200).json({
+            items: responseItems,
             page,
             limit,
             total,
