@@ -11,8 +11,11 @@ const Classroom = require('../models/Classroom');
 const { sendNotification } = require('../utils/emailService');
 const { verifyToken } = require('../middleware/verifyToken');
 const { checkRole } = require('../middleware/checkRole');
+const { requirePasswordResetComplete } = require('../middleware/requirePasswordResetComplete');
 
 const MAX_LOAN_HOURS = 24;
+
+router.use(verifyToken, requirePasswordResetComplete);
 
 // ==========================================
 // 1. Get Active Loans & Requests (For IT Staff)

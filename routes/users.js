@@ -44,7 +44,7 @@ router.get('/', verifyToken, checkRole(['Admin']), async (req, res) => {
 // CREATE NEW USER (For Admin "Add User" Modal)
 router.post('/', verifyToken, checkRole(['Admin']), async (req, res) => {
     try {
-        const { firstName, lastName, email, role, department } = req.body;
+        const { firstName, lastName, email, role, department, studentId } = req.body;
 
         // Auto-generate username from email
         const username = email.split('@')[0];
@@ -56,6 +56,8 @@ router.post('/', verifyToken, checkRole(['Admin']), async (req, res) => {
             email,
             role,
             department,
+            studentId: studentId || undefined,
+            mustChangePassword: role === 'Student',
             password: tempPassword // Model pre-save hook will hash this
         });
 

@@ -23,7 +23,7 @@ const UserSchema = new mongoose.Schema({
         default: 'Student'
     },
     studentId: {
-        type: String,
+        type: String
     },
     fullName: { type: String },
     // 👇 NEW: Added Department for Admin Panel
@@ -39,6 +39,10 @@ const UserSchema = new mongoose.Schema({
     lastLogin: {
         type: Date,
         default: Date.now // 👇 NEW: Added default
+    },
+    mustChangePassword: {
+        type: Boolean,
+        default: false
     }
 }, { timestamps: true });
 

@@ -61,14 +61,27 @@ router.post('/register', async (req, res) => {
 // @access  Public
 router.post('/login', async (req, res) => {
     try {
-        // 1. Find User by Email
-        const user = await User.findOne({ email: req.body.email });
+        const { loginId, email, studentId, password: inputPassword } = req.body;
+
+        if (!inputPassword) {
+            return res.status(400).json({ message: "Password is required." });
+        }
+
+        // 1. Find User by Email OR Student ID
+        const identifier = (loginId || email || studentId || "").toString().trim();
+        if (!identifier) {
+            return res.status(400).json({ message: "Provide a login identifier (email or student ID)." });
+        }
+
+        const user = await User.findOne({
+            $or: [{ email: identifier }, { studentId: identifier }]
+        });
         if (!user) {
             return res.status(404).json({ message: "User not found!" });
         }
 
         // 2. VERIFY PASSWORD 
-        const isMatch = await bcrypt.compare(req.body.password, user.password);
+        const isMatch = await bcrypt.compare(inputPassword, user.password);
         
         if (!isMatch) {
             return res.status(400).json({ message: "Invalid credentials!" });
@@ -80,19 +93,47 @@ router.post('/login', async (req, res) => {
 
         // 4. Generate JWT Token (SESSION MANAGEMENT UPDATE)
         const token = jwt.sign(
-            { id: user._id, role: user.role }, 
+            { id: user._id, role: user.role, mustChangePassword: user.mustChangePassword }, 
             process.env.JWT_SECRET || "mySuperSecretKey123", 
             { expiresIn: "7m" } //  CHANGED: Session now expires in 7 minutes
         );
 
         // 5. Send Response (excluding password)
-        const { password, ...others } = user._doc;
+        const { password: _password, ...others } = user._doc;
         
-        res.status(200).json({ ...others, token });
+        res.status(200).json({ ...others, token, mustChangePassword: !!user.mustChangePassword });
 
     } catch (err) {
         console.error("Login Error:", err);
         res.status(500).json(err);
+    }
+});
+
+// @route   PUT /api/auth/reset-first-password
+// @desc    Reset temporary password on first login
+// @access  Private
+const { verifyToken } = require('../middleware/verifyToken');
+router.put('/reset-first-password', verifyToken, async (req, res) => {
+    try {
+        const { newPassword } = req.body;
+
+        if (!newPassword || newPassword.length < 6) {
+            return res.status(400).json({ message: "New password must be at least 6 characters." });
+        }
+
+        const user = await User.findById(req.user.id);
+        if (!user) {
+            return res.status(404).json({ message: "User not found!" });
+        }
+
+        user.password = newPassword;
+        user.mustChangePassword = false;
+        await user.save();
+
+        return res.status(200).json({ message: "Password reset successful. You can now use all features." });
+    } catch (err) {
+        console.error("Reset First Password Error:", err);
+        return res.status(500).json({ message: "Server Error", error: err.message });
     }
 });
 

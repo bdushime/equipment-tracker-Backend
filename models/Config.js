@@ -11,7 +11,6 @@ const ConfigSchema = new mongoose.Schema({
     latePenalty: { type: Number, default: 5 },
     damagePenalty: { type: Number, default: 10 },
 
-    // Dynamic Lists for Dropdowns
     equipmentCategories: {
         type: [String],
         default: ["Laptop", "Tablet", "Camera", "Audio", "Video", "Projector", "Accessories", "Electronics", "Other"]
