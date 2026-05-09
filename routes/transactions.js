@@ -10,8 +10,11 @@ const Classroom = require('../models/Classroom');
 const { sendNotification } = require('../utils/emailService');
 const { verifyToken } = require('../middleware/verifyToken');
 const { checkRole } = require('../middleware/checkRole');
+const { requirePasswordResetComplete } = require('../middleware/requirePasswordResetComplete');
 
 const MAX_LOAN_HOURS = 24;
+
+router.use(verifyToken, requirePasswordResetComplete);
 
 // ==========================================
 // 1. Get Active Loans & Requests (For IT Staff)
@@ -568,7 +571,6 @@ router.get('/security/dashboard-stats', verifyToken, async (req, res) => {
             },
             { $sort: { "_id": 1 } }
         ]);
-
         const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
         const trendData = rawTrend.map(item => ({
             name: monthNames[item._id - 1],

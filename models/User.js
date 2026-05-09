@@ -18,6 +18,7 @@ const UserSchema = new mongoose.Schema({
     },
     role: {
         type: String,
+        enum: ['Student', 'Admin', 'Security', 'IT_Staff'],
         default: 'Student'
     },
     studentId: {
@@ -34,6 +35,10 @@ const UserSchema = new mongoose.Schema({
         type: Number,
         default: 100
     },
+    mustChangePassword: {
+        type: Boolean,
+        default: false
+    },
     status: {
         type: String,
         enum: ['Active', 'Suspended'],
@@ -41,7 +46,7 @@ const UserSchema = new mongoose.Schema({
     },
     lastLogin: {
         type: Date,
-        default: Date.now
+        default: Date.now // 👇 NEW: Added default
     },
     // Device Tracking
     lastDevice: { type: String, default: "Web Browser" },

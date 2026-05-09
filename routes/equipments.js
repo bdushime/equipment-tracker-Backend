@@ -339,6 +339,11 @@ router.get('/browse', async (req, res) => {
             return doc;
         });
 
+        // Back-compat: if frontend expects an array, it can call `/api/equipment/browse?raw=true`
+        if (String(req.query.raw).toLowerCase() === 'true') {
+            return res.status(200).json(responseItems);
+        }
+
         res.status(200).json({
             items: responseItems,
             page,
@@ -376,6 +381,11 @@ router.get('/', async (req, res) => {
             }
             return doc;
         });
+
+        // Back-compat: if frontend expects an array, it can call `/api/equipment?raw=true`
+        if (String(req.query.raw).toLowerCase() === 'true') {
+            return res.status(200).json(responseItems);
+        }
 
         res.status(200).json({
             items: responseItems,
