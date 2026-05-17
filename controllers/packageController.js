@@ -265,6 +265,13 @@ exports.bookPackage = async (req, res) => {
             savedTransactions.push(transaction);
         }
 
+        // Hold every device in the package so no other student can borrow them
+        // while IT reviews the request. Reverted on deny / cancel / expiry.
+        await Equipment.updateMany(
+            { _id: { $in: pkg.devices.map((d) => d._id) }, status: 'Available' },
+            { $set: { status: 'Reserved' } }
+        );
+
         const deviceNames = pkg.devices.map((d) => d.name).join(', ');
         const screenNote = hasScreenFlag
             ? ' (Special approval required due to room restrictions)'
@@ -328,6 +335,15 @@ exports.cancelPackageBooking = async (req, res) => {
         }
 
         const packageTag = escapeRegExp(buildPackagePurposeTag(pkg.name));
+
+        // Capture which equipment the pending transactions hold so we can release them
+        const pendingTxs = await Transaction.find({
+            user: req.user.id,
+            status: 'Pending',
+            purpose: { $regex: packageTag }
+        }).select('equipment');
+        const heldEquipmentIds = pendingTxs.map((t) => t.equipment);
+
         const result = await Transaction.updateMany(
             {
                 user: req.user.id,
@@ -336,6 +352,13 @@ exports.cancelPackageBooking = async (req, res) => {
             },
             { $set: { status: 'Cancelled' } }
         );
+
+        if (heldEquipmentIds.length > 0) {
+            await Equipment.updateMany(
+                { _id: { $in: heldEquipmentIds }, status: 'Reserved' },
+                { $set: { status: 'Available' } }
+            );
+        }
 
         await AuditLog.create({
             action: 'PACKAGE_BOOKING_CANCELLED',

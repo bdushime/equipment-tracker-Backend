@@ -25,7 +25,7 @@ const equipmentSchema = new mongoose.Schema({
     type: {
         type: String,
         required: [true, 'Device category is required'],
-        enum: ['Projector','Microphone', 'Tablet', 'Router', 'Accessories', 'Electronics', 'Other']
+        enum: ['Projector', 'Accessories', 'Electronics', 'Other']
     },
 
     serialNumber: {
@@ -37,7 +37,7 @@ const equipmentSchema = new mongoose.Schema({
     status: {
         type: String,
         default: 'Available',
-        enum: ['Available', 'Checked Out', 'Maintenance', 'Damaged', 'Lost']
+        enum: ['Available', 'Reserved', 'Checked Out', 'Maintenance', 'Damaged', 'Lost']
     },
 
     location: {
@@ -62,24 +62,15 @@ const equipmentSchema = new mongoose.Schema({
         default: ""
     },
 
-    // Department is optional - NOT required for Security Officers
     department: {
         type: String,
         default: ""
     },
-
-    // =========================================================
-    // 👇 REMOVED: quantity, available, total fields
-    // Availability is now inferred by counting devices per status
-    // =========================================================
-
-    // Purchase and warranty information
     purchaseDate: {
         type: Date,
         default: null
     },
 
-    // Purchase price - required for Security Officers, optional for others
     purchasePrice: {
         type: Number,
         default: 0,
@@ -90,18 +81,11 @@ const equipmentSchema = new mongoose.Schema({
         type: Date,
         default: null
     },
-
-    // =========================================================
-    // 👇 NEW: Structured Specifications (Category-specific)
-    // Stores specs as key-value pairs instead of free-text
-    // Example: { ram: "16GB", storage: "512GB SSD", cpu: "i7-12700H" }
-    // =========================================================
     specifications: {
         type: mongoose.Schema.Types.Mixed,
         default: {}
     },
 
-    // Track who added this device
     addedBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
@@ -114,9 +98,6 @@ const equipmentSchema = new mongoose.Schema({
         default: null
     },
 
-    // =========================================================
-    // 👇 IOT TRACKING FIELDS (Updated for Simulation)
-    // =========================================================
     iotTag: {
         type: String,
         unique: true,
@@ -145,8 +126,6 @@ const equipmentSchema = new mongoose.Schema({
     }
 
 }, { timestamps: true });
-
-// Index for faster availability queries
 equipmentSchema.index({ type: 1, status: 1 });
 
 module.exports = mongoose.model('Equipment', equipmentSchema);

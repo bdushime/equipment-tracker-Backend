@@ -1,5 +1,5 @@
 require('dotenv').config();
-// require('dns').setServers(['8.8.8.8', '8.8.4.4']); 
+require('dns').setServers(['8.8.8.8', '8.8.4.4']); 
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
@@ -7,7 +7,7 @@ const User = require('../models/User');
 const START_ID = 25000;
 const END_ID = 26700;
 const TEMP_PASSWORD = process.env.STUDENT_TEMP_PASSWORD || "password123";
-const TEMP_EMAIL_DOMAIN = process.env.STUDENT_TEMP_EMAIL_DOMAIN || "temp.students.local";
+const TEMP_EMAIL_DOMAIN = process.env.STUDENT_TEMP_EMAIL_DOMAIN || "auca.ac.rw";
 
 const run = async () => {
     try {

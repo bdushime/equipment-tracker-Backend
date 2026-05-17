@@ -163,6 +163,11 @@ router.post('/checkout', verifyToken, async (req, res) => {
             await equipment.save();
             sendNotification(user._id, user.email, "Equipment Checked Out", `You have borrowed: ${equipment.name}.`, "success", savedTransaction._id).catch(console.error);
         } else {
+            // Pending request: hold the device so no other student can borrow it
+            // while IT decides. Reverted to 'Available' on deny / cancel / expiry.
+            equipment.status = 'Reserved';
+            await equipment.save();
+
             await sendNotification(
                 user._id,
                 user.email,
@@ -475,7 +480,9 @@ router.put('/:id/respond', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin']), 
         } else if (action === 'Deny') {
             transaction.status = 'Denied';
             const equipment = await Equipment.findById(transaction.equipment._id);
-            if (equipment && equipment.status !== 'Available') {
+            // Only release the hold we placed when the request was created.
+            // We must not touch Maintenance/Damaged/Lost or other unrelated states.
+            if (equipment && equipment.status === 'Reserved') {
                 equipment.status = 'Available';
                 await equipment.save();
             }

@@ -1,22 +1,27 @@
 const mongoose = require('mongoose');
 
 const PackageSchema = new mongoose.Schema({
-    name: { 
-        type: String, 
-        required: true, 
-        trim: true 
+    name: {
+        type: String,
+        required: true,
+        trim: true
     },
-    description: { 
-        type: String, 
-        required: true 
+    description: {
+        type: String,
+        default: ''
     },
-    items: [{ 
-        type: String, 
-        required: true 
-    }], 
-    isActive: { 
-        type: Boolean, 
-        default: true 
+    devices: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Equipment'
+    }],
+    isActive: {
+        type: Boolean,
+        default: true
+    },
+    createdBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
     }
 }, { timestamps: true });
 
