@@ -23,7 +23,7 @@ const iotRoute = require('./routes/iot');
 const classroomRoute = require('./routes/classrooms');
 const courseRoute = require('./routes/courses');
 const rolesRoute = require('./routes/roles');
-const packageRoute = require('./routes/packages');
+const packageRoutes = require('./routes/packageRoutes');
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
@@ -63,7 +63,7 @@ app.use('/api/classrooms', classroomRoute);
 app.use('/api/courses', courseRoute);
 app.use('/api/roles', rolesRoute);
 app.use('/api/iot', iotRoute);
-app.use('/api/packages', packageRoute);
+app.use('/api/packages', packageRoutes);
 
 // Checkout route handled in routes/transactions.js using the transactions router.
 
