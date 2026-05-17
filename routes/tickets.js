@@ -75,8 +75,10 @@ router.post('/', async (req, res) => {
             </div>
         `;
 
+        const itSupportEmail = process.env.SMTP_USER || process.env.EMAIL_USER || "bdushime47@gmail.com";
+
         await sendEmail({
-            to: "it-support@auca.ac.rw",
+            to: itSupportEmail, // Send to the real configured email instead of mock auca.ac.rw
             subject: `[New Ticket] ${subject}`,
             html: emailHTML,
             text: `A new ticket has been raised by ${email}. Subject: ${subject}. Message: ${message}`
