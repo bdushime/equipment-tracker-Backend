@@ -1,6 +1,8 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const Equipment = require('../models/Equipment');
+const Package = require('../models/Package');
 const { verifyToken } = require('../middleware/verifyToken');
 const { checkRole } = require('../middleware/checkRole');
 
@@ -21,29 +23,18 @@ const validateDeviceForRole = (device, role) => {
         errors.push('Serial number is required');
     }
 
-    // Security Officer specific validation
+    // Location is required for Security Officers
     if (role === 'Security') {
-        // Purchase price is REQUIRED for Security Officers
-        if (device.purchasePrice === undefined || device.purchasePrice === null || device.purchasePrice === '') {
-            errors.push('Purchase price is required for Security Officers');
-        } else {
-            const price = parseFloat(device.purchasePrice);
-            if (isNaN(price) || price < 0) {
-                errors.push('Purchase price must be a valid number ≥ 0');
-            }
-        }
-
-        // Location is required
-        if (!device.location || device.location.trim() === '') {
+        if (!device.location || (typeof device.location === 'string' && device.location.trim() === '')) {
             errors.push('Location is required');
         }
+    }
 
-        // Brand and model are required
-        if (!device.brand || device.brand.trim() === '') {
-            errors.push('Brand is required');
-        }
-        if (!device.model || device.model.trim() === '') {
-            errors.push('Model is required');
+    // Optional fields — validate format only when provided
+    if (device.purchasePrice !== undefined && device.purchasePrice !== null && device.purchasePrice !== '') {
+        const price = parseFloat(device.purchasePrice);
+        if (isNaN(price) || price < 0) {
+            errors.push('Purchase price must be a valid number ≥ 0');
         }
     }
 
@@ -58,7 +49,14 @@ const validateDeviceForRole = (device, role) => {
 router.post('/', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin', 'Security']), async (req, res) => {
     try {
         const userRole = req.user.role;
-        const deviceData = { ...req.body };
+        const { packageId, ...body } = req.body;
+        const deviceData = { ...body };
+
+        if (packageId && !['Security', 'Admin'].includes(userRole)) {
+            return res.status(403).json({
+                message: 'Only Security officers and Admins can assign devices to packages'
+            });
+        }
 
         // Map category to type if needed (frontend uses 'category', backend uses 'type')
         if (deviceData.category && !deviceData.type) {
@@ -95,6 +93,35 @@ router.post('/', verifyToken, checkRole(['IT', 'IT_Staff', 'Admin', 'Security'])
         const savedEquipment = await newEquipment.save();
 
         console.log(`✅ Device created by ${userRole}: ${savedEquipment.name}`);
+
+        if (packageId) {
+            if (!mongoose.Types.ObjectId.isValid(packageId)) {
+                return res.status(207).json({
+                    message: 'Device created successfully, but the package ID is invalid',
+                    data: savedEquipment
+                });
+            }
+
+            const pkg = await Package.findById(packageId);
+            if (!pkg) {
+                return res.status(207).json({
+                    message: 'Device created successfully, but the package was not found',
+                    data: savedEquipment
+                });
+            }
+
+            const alreadyInPackage = pkg.devices.some(
+                (deviceRef) => deviceRef.toString() === savedEquipment._id.toString()
+            );
+
+            if (!alreadyInPackage) {
+                pkg.devices.push(savedEquipment._id);
+                await pkg.save();
+            }
+
+            return res.status(201).json(savedEquipment);
+        }
+
         res.status(201).json(savedEquipment);
     } catch (err) {
         console.error('❌ Error creating device:', err);
@@ -209,6 +236,36 @@ router.post('/bulk', verifyToken, checkRole(['IT', 'Admin', 'Security']), async 
 
     } catch (err) {
         console.error('❌ Bulk upload error:', err);
+        res.status(500).json({ message: 'Server error', error: err.message });
+    }
+});
+
+// ==========================================
+// 3a. GET DEVICES IN PACKAGES
+// Returns a map of deviceId -> package info for all active packages
+// Used by frontend to flag/disable devices that belong to a package
+// ==========================================
+router.get('/in-packages', async (req, res) => {
+    try {
+        const activePackages = await Package.find({ isActive: true }).select('_id name devices');
+
+        // Build a map: deviceId -> { packageId, packageName }
+        const devicePackageMap = {};
+        for (const pkg of activePackages) {
+            for (const deviceId of pkg.devices) {
+                devicePackageMap[deviceId.toString()] = {
+                    packageId: pkg._id,
+                    packageName: pkg.name
+                };
+            }
+        }
+
+        res.status(200).json({
+            message: 'Package device map retrieved successfully',
+            data: devicePackageMap
+        });
+    } catch (err) {
+        console.error('Error fetching package devices:', err);
         res.status(500).json({ message: 'Server error', error: err.message });
     }
 });
@@ -329,6 +386,18 @@ router.get('/browse', async (req, res) => {
             Equipment.countDocuments(query)
         ]);
 
+        // Build package membership map for returned devices
+        const activePackages = await Package.find({ isActive: true }).select('_id name devices');
+        const devicePackageMap = {};
+        for (const pkg of activePackages) {
+            for (const deviceId of pkg.devices) {
+                devicePackageMap[deviceId.toString()] = {
+                    packageId: pkg._id,
+                    packageName: pkg.name
+                };
+            }
+        }
+
         // Flatten coordinates here too
         const responseItems = items.map(item => {
             const doc = item.toObject();
@@ -336,6 +405,9 @@ router.get('/browse', async (req, res) => {
                 doc.lat = doc.geoCoordinates.lat;
                 doc.lng = doc.geoCoordinates.lng;
             }
+            const pkgInfo = devicePackageMap[doc._id.toString()];
+            doc.inPackage = !!pkgInfo;
+            doc.packageInfo = pkgInfo || null;
             return doc;
         });
 
@@ -372,6 +444,18 @@ router.get('/', async (req, res) => {
             Equipment.countDocuments()
         ]);
 
+        // Build package membership map for returned devices
+        const activePackages = await Package.find({ isActive: true }).select('_id name devices');
+        const devicePackageMap = {};
+        for (const pkg of activePackages) {
+            for (const deviceId of pkg.devices) {
+                devicePackageMap[deviceId.toString()] = {
+                    packageId: pkg._id,
+                    packageName: pkg.name
+                };
+            }
+        }
+
         // Flatten coordinates for frontend compatibility
         const responseItems = items.map(item => {
             const doc = item.toObject(); // Convert to plain object
@@ -379,6 +463,9 @@ router.get('/', async (req, res) => {
                 doc.lat = doc.geoCoordinates.lat;
                 doc.lng = doc.geoCoordinates.lng;
             }
+            const pkgInfo = devicePackageMap[doc._id.toString()];
+            doc.inPackage = !!pkgInfo;
+            doc.packageInfo = pkgInfo || null;
             return doc;
         });
 
