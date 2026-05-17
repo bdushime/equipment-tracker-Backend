@@ -12,7 +12,6 @@ router.post('/register', async (req, res) => {
     try {
         const { username, email, password, studentId } = req.body;
 
-        // --- 1. INPUT VALIDATION ---
         if (!username || !email || !password) {
             return res.status(400).json({ message: "Please fill in all required fields." });
         }
@@ -26,9 +25,6 @@ router.post('/register', async (req, res) => {
             return res.status(400).json({ message: "Invalid email format." });
         }
 
-        // --- 2. DUPLICATE CHECK (UPDATED: Specific Error Messages) ---
-        
-        // Check Email
         const existingEmail = await User.findOne({ email: email });
         if (existingEmail) {
             return res.status(400).json({ message: "This Email address is already registered!" });
@@ -122,7 +118,7 @@ router.post('/login', async (req, res) => {
         const token = jwt.sign(
             { id: user._id, role: user.role, mustChangePassword: user.mustChangePassword },
             process.env.JWT_SECRET || "mySuperSecretKey123",
-            { expiresIn: "7m" } // CHANGED: Session now expires in 7 minutes
+            { expiresIn: "30m" } // CHANGED: Session now expires in 7 minutes
         );
 
         // 5. Send Response (excluding password)
