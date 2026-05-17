@@ -100,4 +100,20 @@ router.get('/my-tickets', verifyToken, async (req, res) => {
     }
 });
 
+// GET /api/tickets (Get all tickets - role-aware for IT Staff and Admins)
+router.get('/', verifyToken, async (req, res) => {
+    try {
+        if (req.user.role === 'IT_Staff' || req.user.role === 'Admin') {
+            const tickets = await Ticket.find().populate('user', 'username email fullName studentId').sort({ createdAt: -1 });
+            return res.status(200).json(tickets);
+        } else {
+            const tickets = await Ticket.find({ user: req.user.id }).sort({ createdAt: -1 });
+            return res.status(200).json(tickets);
+        }
+    } catch (err) {
+        console.error("❌ Get Tickets Error:", err);
+        res.status(500).json(err);
+    }
+});
+
 module.exports = router;

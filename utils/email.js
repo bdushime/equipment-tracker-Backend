@@ -5,10 +5,16 @@ const nodemailer = require('nodemailer');
  * Supports real SMTP transport or fallback mockup console logging to prevent crashes.
  */
 const sendEmail = async ({ to, subject, html, text }) => {
-    const smtpHost = process.env.SMTP_HOST;
-    const smtpPort = process.env.SMTP_PORT || 587;
-    const smtpUser = process.env.SMTP_USER;
-    const smtpPass = process.env.SMTP_PASS;
+    // Read SMTP or preexisting EMAIL variables from .env
+    const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
+    const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
+    
+    let smtpHost = process.env.SMTP_HOST || process.env.EMAIL_HOST;
+    if (!smtpHost && smtpUser && smtpUser.includes('gmail.com')) {
+        smtpHost = 'smtp.gmail.com';
+    }
+
+    const smtpPort = process.env.SMTP_PORT || process.env.EMAIL_PORT || 587;
 
     const isSMTPConfigured = smtpHost && smtpUser && smtpPass;
 
