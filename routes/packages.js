@@ -1,3 +1,10 @@
+/**
+ * @deprecated
+ * This file is no longer in use.
+ * All package routes have been moved to routes/packageRoutes.js
+ * and are mounted at /api/packages in server.js.
+ * This file can be safely deleted once the team has reviewed.
+ */
 const router = require('express').Router();
 const Package = require('../models/Package');
 
