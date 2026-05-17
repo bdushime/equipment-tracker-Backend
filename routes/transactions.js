@@ -21,11 +21,14 @@ router.use(verifyToken, requirePasswordResetComplete);
 // ==========================================
 router.get('/active', verifyToken, async (req, res) => {
     try {
+        // Exclude heavy base64 photo blobs from the list payload; the detail
+        // endpoint (GET /:id) returns them on demand when the dialog opens.
         const transactions = await Transaction.find({
             status: { $in: ['Pending', 'Checked Out', 'Overdue', 'Borrowed', 'Reserved', 'Pending Return'] }
         })
-            .populate('equipment', 'name serialNumber')
-            .populate('user', 'username email responsibilityScore')
+            .select('-checkoutPhotoUrl')
+            .populate('equipment', 'name serialNumber type category')
+            .populate('user', 'username email fullName phone studentId department responsibilityScore')
             .sort({ createdAt: -1 });
 
         res.status(200).json(transactions);
@@ -77,6 +80,18 @@ router.post('/checkout', verifyToken, async (req, res) => {
             return res.status(403).json({ message: "Security Alert: You are banned from borrowing due to low score." });
         }
 
+        // One-at-a-time policy: block if the student already has a pending request or active loan
+        const ACTIVE_BLOCKING_STATUSES = ['Pending', 'Checked Out', 'Borrowed', 'Overdue', 'Pending Return'];
+        const existingActive = await Transaction.findOne({
+            user: targetUserId,
+            status: { $in: ACTIVE_BLOCKING_STATUSES }
+        }).populate('equipment', 'name');
+        if (existingActive) {
+            return res.status(409).json({
+                message: `You already have an active checkout (${existingActive.equipment?.name || 'a device'} — status: ${existingActive.status}). Please return or resolve it before requesting another.`
+            });
+        }
+
         // Policy Check: Duration
         const returnDate = new Date(expectedReturnTime);
         const now = new Date();
@@ -90,6 +105,15 @@ router.post('/checkout', verifyToken, async (req, res) => {
         const equipment = await Equipment.findById(equipmentId);
         if (!equipment || equipment.status !== 'Available') {
             return res.status(400).json({ message: "Error: Equipment is not available." });
+        }
+
+        // Package membership check: devices in a package cannot be borrowed individually
+        const Package = require('../models/Package');
+        const parentPackage = await Package.findOne({ devices: equipmentId, isActive: true }).select('name');
+        if (parentPackage) {
+            return res.status(400).json({
+                message: `This device belongs to the "${parentPackage.name}" package and cannot be borrowed individually. Please book the full package instead.`
+            });
         }
 
         let status = isStudent ? 'Pending' : 'Checked Out';
@@ -116,13 +140,18 @@ router.post('/checkout', verifyToken, async (req, res) => {
             }
         }
 
+        const conditionPhotos = req.body.conditionPhotos && typeof req.body.conditionPhotos === 'object'
+            ? req.body.conditionPhotos
+            : {};
+        const checkoutPhotoUrl = [conditionPhotos.front, conditionPhotos.back].filter(Boolean);
+
         const newTransaction = new Transaction({
             user: targetUserId,
             equipment: equipmentId,
             expectedReturnTime: expectedReturnTime,
             destination: destination,
             purpose: purpose + adminNote,
-            checkoutPhotoUrl: req.body.checkoutPhotoUrl || "",
+            checkoutPhotoUrl,
             signatureUrl: req.body.signatureUrl || "",
             status: status
         });
@@ -743,6 +772,39 @@ router.get('/admin/snapshots', verifyToken, checkRole(['Admin']), async (req, re
     } catch (err) {
         console.error("Snapshots Error:", err);
         res.status(500).json(err);
+    }
+});
+
+// ==========================================
+// 15. Get a single transaction with full detail (for IT/Admin review dialog)
+// Must be registered LAST so it doesn't shadow specific GET routes like
+// /active, /my-borrowed, /my-history, /admin/*, /security/*.
+// ==========================================
+router.get('/:id', verifyToken, async (req, res) => {
+    try {
+        const mongoose = require('mongoose');
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            return res.status(400).json({ message: 'Invalid transaction ID' });
+        }
+
+        const transaction = await Transaction.findById(req.params.id)
+            .populate('equipment', 'name serialNumber type category description')
+            .populate('user', 'username email fullName phone studentId department responsibilityScore role');
+
+        if (!transaction) {
+            return res.status(404).json({ message: 'Transaction not found' });
+        }
+
+        // Students can only see their own; staff can see anything.
+        const isStaff = ['IT', 'IT_Staff', 'Admin', 'Security'].includes(req.user.role);
+        if (!isStaff && transaction.user?._id?.toString() !== req.user.id) {
+            return res.status(403).json({ message: 'Forbidden' });
+        }
+
+        res.status(200).json({ data: transaction });
+    } catch (err) {
+        console.error("Error fetching transaction:", err);
+        res.status(500).json({ message: "Server Error" });
     }
 });
 
