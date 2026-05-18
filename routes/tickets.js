@@ -118,4 +118,28 @@ router.get('/', verifyToken, async (req, res) => {
     }
 });
 
+// PUT /api/tickets/:id/resolve (Resolve a ticket)
+router.put('/:id/resolve', verifyToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'IT_Staff' && req.user.role !== 'Admin') {
+            return res.status(403).json({ message: "You are not authorized to perform this action." });
+        }
+        
+        const ticket = await Ticket.findByIdAndUpdate(
+            req.params.id,
+            { status: 'Resolved' },
+            { new: true }
+        );
+        
+        if (!ticket) {
+            return res.status(404).json({ message: "Ticket not found!" });
+        }
+        
+        res.status(200).json(ticket);
+    } catch (err) {
+        console.error("❌ Resolve Ticket Error:", err);
+        res.status(500).json({ message: "Failed to resolve ticket", error: err.message });
+    }
+});
+
 module.exports = router;

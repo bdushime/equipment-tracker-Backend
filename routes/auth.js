@@ -82,7 +82,7 @@ router.post('/login', async (req, res) => {
             $or: [{ email: identifier }, { studentId: identifier }]
         });
         if (!user) {
-            return res.status(404).json({ message: "User not found!" });
+            return res.status(404).json({ message: "User doesn't exist" });
         }
 
         // --- NEW: Check if user is suspended
@@ -93,7 +93,7 @@ router.post('/login', async (req, res) => {
         // 2. VERIFY PASSWORD
         const isMatch = await bcrypt.compare(inputPassword, user.password);
         if (!isMatch) {
-            return res.status(400).json({ message: "Invalid credentials!" });
+            return res.status(400).json({ message: "Password is wrong" });
         }
 
         // 3. Update Last Login
