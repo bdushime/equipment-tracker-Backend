@@ -51,7 +51,12 @@ const UserSchema = new mongoose.Schema({
     // Device Tracking
     lastDevice: { type: String, default: "Web Browser" },
     lastIp: { type: String, default: "127.0.0.1" },
-    lastLocation: { type: String, default: "Kigali, RW" }
+    lastLocation: { type: String, default: "Kigali, RW" },
+    // Password Reset & OTP Fields
+    resetPasswordToken: { type: String },
+    resetPasswordExpires: { type: Date },
+    otpCode: { type: String },
+    otpExpires: { type: Date }
 }, { timestamps: true });
 
 UserSchema.pre('save', async function () {
