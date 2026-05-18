@@ -590,29 +590,40 @@ router.get('/security/dashboard-stats', verifyToken, async (req, res) => {
     try {
         const activeCount = await Transaction.countDocuments({ status: { $in: ['Checked Out', 'Pending Return'] } });
         const overdueCount = await Transaction.countDocuments({ status: 'Overdue' });
-        const sixMonthsAgo = new Date();
-        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-
-        const rawTrend = await Transaction.aggregate([
-            {
-                $group: {
-                    _id: { $month: "$createdAt" },
-                    checkouts: {
-                        $sum: { $cond: [{ $in: ["$status", ["Checked Out", "Returned", "Overdue"]] }, 1, 0] }
-                    },
-                    overdue: {
-                        $sum: { $cond: [{ $eq: ["$status", "Overdue"] }, 1, 0] }
-                    }
-                }
-            },
-            { $sort: { "_id": 1 } }
-        ]);
+        // --- DYNAMIC ACTIVITY TRENDS (Last 6 months) ---
         const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-        const trendData = rawTrend.map(item => ({
-            name: monthNames[item._id - 1],
-            checkouts: item.checkouts,
-            failed: item.overdue
-        }));
+        const activityMap = new Map();
+        
+        for (let i = 5; i >= 0; i--) {
+            const d = new Date();
+            d.setMonth(d.getMonth() - i);
+            const mName = monthNames[d.getMonth()];
+            activityMap.set(mName, { name: mName, checkouts: 0, failed: 0 });
+        }
+
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
+        sixMonthsAgo.setDate(1);
+        sixMonthsAgo.setHours(0,0,0,0);
+
+        const recentTransactions = await Transaction.find({
+            createdAt: { $gte: sixMonthsAgo }
+        });
+
+        recentTransactions.forEach(t => {
+            const m = monthNames[t.createdAt.getMonth()];
+            if (activityMap.has(m)) {
+                const stat = activityMap.get(m);
+                if (["Checked Out", "Returned", "Overdue"].includes(t.status)) {
+                    stat.checkouts += 1;
+                }
+                if (t.status === "Overdue" || t.status === "Denied") {
+                    stat.failed += 1;
+                }
+            }
+        });
+
+        const trendData = Array.from(activityMap.values());
 
         // 👇 BULLETPROOF FIX: We fetch all transactions and tally the equipment categories in JavaScript
         const allTransactions = await Transaction.find().populate('equipment', 'type category');
