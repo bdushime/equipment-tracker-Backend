@@ -7,7 +7,7 @@ const User = require('../models/User');
 const START_ID = 25000;
 const END_ID = 26700;
 const TEMP_PASSWORD = process.env.STUDENT_TEMP_PASSWORD || "password123";
-const TEMP_EMAIL_DOMAIN = process.env.STUDENT_TEMP_EMAIL_DOMAIN || "auca.ac.rw";
+const TEMP_EMAIL_DOMAIN = process.env.STUDENT_TEMP_EMAIL_DOMAIN || "yopmail.com";
 
 const run = async () => {
     try {
@@ -23,19 +23,26 @@ const run = async () => {
         for (let id = START_ID; id <= END_ID; id += 1) {
             const studentId = String(id);
             const username = `student${studentId}`;
-            const email = `${username}@${TEMP_EMAIL_DOMAIN}`;
+            // Email format: {firstname}.{lastname}@yopmail.com
+            // firstname = "student", lastname = the student ID
+            const firstName = 'student';
+            const lastName = studentId;
+            const email = `${firstName}.${lastName}@${TEMP_EMAIL_DOMAIN}`;
+            const fullName = `Student ${studentId}`;
 
             operations.push({
                 updateOne: {
                     filter: { studentId },
                     update: {
+                        // $set rewrites email on every run so existing rows get
+                        // migrated to the new format, not just brand-new inserts.
+                        $set: { email },
                         $setOnInsert: {
                             username,
-                            email,
                             password: hashedPassword,
                             role: 'Student',
                             studentId,
-                            fullName: `Student ${studentId}`,
+                            fullName,
                             department: 'General',
                             mustChangePassword: true
                         }

@@ -293,7 +293,7 @@ exports.bookPackage = async (req, res) => {
                     staff._id,
                     staff.email,
                     'New Package Borrow Request',
-                    `${user.username} has requested the "${pkg.name}" package: ${deviceNames}.${hasScreenFlag ? ' ⚠️ ALERT: Room already has a screen.' : ''}`,
+                    `${user.fullName || user.username} has requested the "${pkg.name}" package: ${deviceNames}.${hasScreenFlag ? ' ⚠️ ALERT: Room already has a screen.' : ''}`,
                     'warning',
                     savedTransactions[0]._id
                 ).catch(console.error);

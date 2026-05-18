@@ -197,7 +197,7 @@ router.post('/checkout', verifyToken, async (req, res) => {
                         staff._id,
                         staff.email,
                         "New Borrow Request",
-                        `${user.username} has requested the ${equipment.name}.${adminNote ? ' ⚠️ ALERT: Room already has a screen.' : ''}`,
+                        `${user.fullName || user.username} has requested the ${equipment.name}.${adminNote ? ' ⚠️ ALERT: Room already has a screen.' : ''}`,
                         "warning",
                         savedTransaction._id
                     ).catch(console.error);
@@ -253,7 +253,7 @@ router.put('/:id/request-return', verifyToken, async (req, res) => {
                     staff._id,
                     staff.email,
                     "Return Request",
-                    `${transaction.user.username} has requested to return the ${transaction.equipment.name}. Please verify and check it in.`,
+                    `${transaction.user.fullName || transaction.user.username} has requested to return the ${transaction.equipment.name}. Please verify and check it in.`,
                     "info",
                     transaction._id
                 ).catch(console.error);

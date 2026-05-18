@@ -71,7 +71,7 @@ const startOverdueCheck = () => {
                             admin._id,
                             admin.email,
                             "URGENT: Severely Overdue Equipment",
-                            `The student ${transaction.user?.username || 'Unknown'} is severely late (${Math.floor(hoursLate)} hours) returning ${transaction.equipment?.name || 'Equipment'}.`,
+                            `The student ${transaction.user?.fullName || transaction.user?.username || 'Unknown'} is severely late (${Math.floor(hoursLate)} hours) returning ${transaction.equipment?.name || 'Equipment'}.`,
                             "warning",
                             transaction._id
                         );

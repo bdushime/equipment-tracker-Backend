@@ -30,8 +30,8 @@ router.get('/', verifyToken, checkRole(['Admin']), async (req, res) => {
         let transactions = await Transaction.find(query)
             .populate({
                 path: 'user',
-                select: 'username email role department responsibilityScore',
-                match: role && role !== "All Roles" ? { role: role } : {} 
+                select: 'username fullName email role department responsibilityScore',
+                match: role && role !== "All Roles" ? { role: role } : {}
             })
             .populate({
                 path: 'equipment',
@@ -43,21 +43,30 @@ router.get('/', verifyToken, checkRole(['Admin']), async (req, res) => {
         // 4. Post-Filter (because populate 'match' returns null for non-matching docs)
         transactions = transactions.filter(t => t.user && t.equipment);
 
-        // 5. Search Filter (Frontend search is faster for small datasets, but backend is safer)
+        // 5. Search Filter — match against fullName OR username so the
+        // admin can search by the student's displayed name or their handle.
         if (search) {
             const lowerSearch = search.toLowerCase();
-            transactions = transactions.filter(t => 
+            transactions = transactions.filter(t =>
+                (t.user.fullName || "").toLowerCase().includes(lowerSearch) ||
                 t.user.username.toLowerCase().includes(lowerSearch) ||
                 t.equipment.name.toLowerCase().includes(lowerSearch)
             );
         }
 
-        // 6. Format Data for Table
+        // 6. Format Data for Table — return user as an OBJECT (not a flat string)
+        // so the frontend can show fullName when present and fall back to username
+        // when it isn't (e.g. student hasn't completed first-login yet).
         const tableData = transactions.map(t => ({
             id: t._id,
             item: t.equipment.name,
             category: t.equipment.category,
-            user: t.user.username,
+            user: {
+                fullName: t.user.fullName || "",
+                username: t.user.username,
+                email: t.user.email,
+                role: t.user.role,
+            },
             role: t.user.role,
             dept: t.user.department || "General",
             dateOut: t.createdAt,
