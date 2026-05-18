@@ -14,14 +14,20 @@ const verifyToken = (req, res, next) => {
 
         jwt.verify(token, process.env.JWT_SECRET || "mySuperSecretKey123", (err, user) => {
             if (err) {
-                return res.status(403).json("Token is not valid!");
+                // 401 (not 403) — an invalid or expired JWT means "not authenticated",
+                // which the frontend's axios interceptor uses to trigger auto-logout.
+                // 403 is reserved for "authenticated but not allowed for this resource".
+                const reason = err.name === 'TokenExpiredError'
+                    ? 'Token expired'
+                    : 'Token is not valid!';
+                return res.status(401).json({ message: reason, code: err.name });
             }
-           
+
             req.user = user;
             next();
         });
     } else {
-        return res.status(401).json("You are not authenticated! No token found.");
+        return res.status(401).json({ message: "You are not authenticated! No token found." });
     }
 };
 

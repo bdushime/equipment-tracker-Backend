@@ -393,8 +393,12 @@ exports.addDevicesToPackage = async (req, res) => {
         const toAdd = deviceResult.ids.filter((deviceId) => !existing.has(deviceId));
 
         if (toAdd.length > 0) {
-            pkg.devices.push(...toAdd);
-            await pkg.save();
+            // Atomic $addToSet — avoids re-validating untouched required fields
+            // (e.g. older packages missing `createdBy`) that pkg.save() would trip on.
+            await Package.updateOne(
+                { _id: id },
+                { $addToSet: { devices: { $each: toAdd } } }
+            );
         }
 
         const populated = await Package.findById(id).populate(populateOptions);
@@ -422,14 +426,17 @@ exports.removeDeviceFromPackage = async (req, res) => {
             return res.status(404).json({ message: 'Package not found' });
         }
 
-        const before = pkg.devices.length;
-        pkg.devices = pkg.devices.filter((d) => d.toString() !== deviceId);
-
-        if (pkg.devices.length === before) {
+        const hasDevice = pkg.devices.some((d) => d.toString() === deviceId);
+        if (!hasDevice) {
             return res.status(404).json({ message: 'Device not found in this package' });
         }
 
-        await pkg.save();
+        // Atomic $pull — same reason as $addToSet above: skip full-document
+        // validation so legacy docs missing createdBy can still be updated.
+        await Package.updateOne(
+            { _id: id },
+            { $pull: { devices: deviceId } }
+        );
 
         const populated = await Package.findById(id).populate(populateOptions);
 
