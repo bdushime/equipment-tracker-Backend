@@ -45,6 +45,7 @@ router.get('/my-borrowed', verifyToken, async (req, res) => {
     try {
         const activeTransactions = await Transaction.find({
             user: req.user.id,
+            status: { $in: ['Pending', 'Checked Out', 'Borrowed', 'Overdue', 'Pending Return', 'Reserved', 'Saved'] },
             returnTime: null
         })
             .populate('equipment')
@@ -287,6 +288,7 @@ router.post('/checkin', verifyToken, async (req, res) => {
         const transaction = await Transaction.findOne({
             user: targetUserId,
             equipment: equipmentId,
+            status: { $in: ['Checked Out', 'Borrowed', 'Overdue', 'Pending Return'] },
             returnTime: null
         });
 

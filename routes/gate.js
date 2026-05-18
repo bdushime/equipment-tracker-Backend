@@ -38,6 +38,7 @@ router.get('/check-status/:studentId', async (req, res) => {
         // 2. Check for active loans where equipment hasn't been returned (returnTime is null)
         const activeLoans = await Transaction.find({ 
             user: user._id, 
+            status: { $in: ['Checked Out', 'Borrowed', 'Overdue', 'Pending Return'] },
             returnTime: null 
         }).populate('equipment');
 
