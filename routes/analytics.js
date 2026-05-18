@@ -59,15 +59,46 @@ router.get('/dashboard', verifyToken, async (req, res) => {
             count: stat.count
         }));
 
-        // Default placeholder trends
-        const activityTrends = [
-            { name: "Jan", checkouts: 0, returns: 0 },
-            { name: "Feb", checkouts: 0, returns: 0 },
-            { name: "Mar", checkouts: 0, returns: 0 },
-            { name: "Apr", checkouts: 0, returns: 0 },
-            { name: "May", checkouts: 0, returns: 0 },
-            { name: "Jun", checkouts: 0, returns: 0 },
-        ];
+        // --- 4. DYNAMIC ACTIVITY TRENDS (Last 6 months) ---
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const activityMap = new Map();
+        
+        for (let i = 5; i >= 0; i--) {
+            const d = new Date();
+            d.setMonth(d.getMonth() - i);
+            const mName = monthNames[d.getMonth()];
+            activityMap.set(mName, { name: mName, checkouts: 0, returns: 0 });
+        }
+
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
+        sixMonthsAgo.setDate(1);
+        sixMonthsAgo.setHours(0,0,0,0);
+
+        const recentTransactions = await Transaction.find({
+            createdAt: { $gte: sixMonthsAgo }
+        });
+
+        recentTransactions.forEach(t => {
+            const m = monthNames[t.createdAt.getMonth()];
+            if (activityMap.has(m)) {
+                const stat = activityMap.get(m);
+                stat.checkouts += 1;
+            }
+            
+            if (t.returnTime) {
+                const retM = monthNames[t.returnTime.getMonth()];
+                if (activityMap.has(retM)) {
+                    activityMap.get(retM).returns += 1;
+                }
+            } else if (t.status === 'Returned') {
+                if (activityMap.has(m)) {
+                    activityMap.get(m).returns += 1;
+                }
+            }
+        });
+
+        const activityTrends = Array.from(activityMap.values());
 
         res.json({
             metrics: {
