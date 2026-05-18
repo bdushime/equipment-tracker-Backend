@@ -5,11 +5,11 @@ async function testRender() {
         const res = await fetch('https://equipment-tracker-backend-dfso.onrender.com/api/auth/forgot-password', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: "dushimebeni65@gmail.com" })
+            body: JSON.stringify({ email: "bdushime47@gmail.com" })
         });
-        const data = await res.json();
+        const text = await res.text();
         console.log("Response Status:", res.status);
-        console.log("Response Body:", data);
+        console.log("Response Body:", text);
     } catch (err) {
         console.error("Error:", err.message);
     }
