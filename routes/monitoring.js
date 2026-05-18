@@ -7,7 +7,7 @@ const { checkRole } = require('../middleware/checkRole');
 // ==========================================
 // 1. GET IoT DASHBOARD DATA (Calculates Online/Offline)
 // ==========================================
-router.get('/live', verifyToken, checkRole(['Security', 'Admin']), async (req, res) => {
+router.get('/live', verifyToken, checkRole(['Security', 'Admin', 'IT_Staff']), async (req, res) => {
     try {
         // Find ALL equipment that has an iotTag
         const trackers = await Equipment.find({
