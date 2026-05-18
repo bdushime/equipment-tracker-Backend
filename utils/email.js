@@ -33,8 +33,10 @@ const sendEmail = async ({ to, subject, html, text }) => {
                 }
             });
 
+            const senderEmail = smtpUser.includes('smtp-brevo.com') ? 'bdushime47@gmail.com' : smtpUser;
+
             const info = await transporter.sendMail({
-                from: `"AUCA Tracknity Support" <${smtpUser}>`,
+                from: `"AUCA Tracknity Support" <${senderEmail}>`,
                 to,
                 subject,
                 text: text || "Tracknity Notification System.",

@@ -72,18 +72,6 @@ exports.createPackage = async (req, res) => {
             return res.status(deviceResult.status).json({ message: deviceResult.message });
         }
 
-        // Enforce: no more than one device per category
-        const devices = await Equipment.find({ _id: { $in: deviceResult.ids } }).select('_id name type');
-        const categoryMap = {};
-        for (const device of devices) {
-            if (categoryMap[device.type]) {
-                return res.status(400).json({
-                    message: `A package cannot have more than one device in the same category. Duplicate category: "${device.type}" (devices: "${categoryMap[device.type]}" and "${device.name}")`
-                });
-            }
-            categoryMap[device.type] = device.name;
-        }
-
         const pkg = await Package.create({
             name: String(name).trim(),
             description: description || '',
@@ -405,19 +393,6 @@ exports.addDevicesToPackage = async (req, res) => {
         const toAdd = deviceResult.ids.filter((deviceId) => !existing.has(deviceId));
 
         if (toAdd.length > 0) {
-            // Enforce: no more than one device per category across existing + new devices
-            const allDeviceIds = [...pkg.devices.map((d) => d.toString()), ...toAdd];
-            const allDevices = await Equipment.find({ _id: { $in: allDeviceIds } }).select('_id name type');
-            const categoryMap = {};
-            for (const device of allDevices) {
-                if (categoryMap[device.type]) {
-                    return res.status(400).json({
-                        message: `A package cannot have more than one device in the same category. Duplicate category: "${device.type}" (devices: "${categoryMap[device.type]}" and "${device.name}")`
-                    });
-                }
-                categoryMap[device.type] = device.name;
-            }
-
             pkg.devices.push(...toAdd);
             await pkg.save();
         }

@@ -9,6 +9,9 @@
  *   4. For every KEPT student whose email doesn't already end in @yopmail.com,
  *      rewrite it to `student.{studentId}@yopmail.com` so the whole roster
  *      uses one consistent domain.
+ *   5. For every KEPT student with an empty/missing fullName, backfill it
+ *      to "Student {studentId}" so the UI never falls back to showing the
+ *      raw username handle. Real names from first-login are never touched.
  *
  * Usage:
  *   node utils/cleanupStudents.js              # show plan + execute
@@ -49,6 +52,7 @@ const run = async () => {
 
         const toDelete = [];
         const toRewriteEmail = [];
+        const toBackfillName = [];
         const kept = { inRange: 0, completedProfile: 0 };
 
         for (const student of allStudents) {
@@ -77,6 +81,17 @@ const run = async () => {
                     newEmail
                 });
             }
+
+            // Backfill fullName if missing/empty. Real first-login names are
+            // left alone — we only fill when there's nothing to show.
+            const currentFullName = (student.fullName || '').trim();
+            if (!currentFullName && student.studentId) {
+                toBackfillName.push({
+                    id: student._id,
+                    studentId: student.studentId,
+                    newFullName: `Student ${student.studentId}`
+                });
+            }
         }
 
         // ── Plan summary ─────────────────────────────────────────────────────
@@ -84,12 +99,21 @@ const run = async () => {
         console.log(`  Keep (in range ${KEEP_START}-${KEEP_END}): ${kept.inRange}`);
         console.log(`  Keep (out of range BUT completed profile): ${kept.completedProfile}`);
         console.log(`  Delete (out of range AND incomplete profile): ${toDelete.length}`);
-        console.log(`  Email rewrites to @${EMAIL_DOMAIN}: ${toRewriteEmail.length}\n`);
+        console.log(`  Email rewrites to @${EMAIL_DOMAIN}: ${toRewriteEmail.length}`);
+        console.log(`  fullName backfills (empty -> "Student {id}"): ${toBackfillName.length}\n`);
 
         if (toRewriteEmail.length > 0 && toRewriteEmail.length <= 10) {
             console.log('Sample email rewrites:');
             for (const r of toRewriteEmail.slice(0, 10)) {
                 console.log(`  ${r.studentId}: ${r.oldEmail || '(empty)'}  ->  ${r.newEmail}`);
+            }
+            console.log('');
+        }
+
+        if (toBackfillName.length > 0 && toBackfillName.length <= 10) {
+            console.log('Sample fullName backfills:');
+            for (const r of toBackfillName.slice(0, 10)) {
+                console.log(`  ${r.studentId}: (empty)  ->  "${r.newFullName}"`);
             }
             console.log('');
         }
@@ -103,6 +127,8 @@ const run = async () => {
         let deletedCount = 0;
         let emailUpdated = 0;
         let emailFailed = 0;
+        let nameBackfilled = 0;
+        let nameFailed = 0;
 
         if (toDelete.length > 0) {
             const ids = toDelete.map((s) => s._id);
@@ -120,10 +146,22 @@ const run = async () => {
             }
         }
 
+        for (const r of toBackfillName) {
+            try {
+                await User.updateOne({ _id: r.id }, { $set: { fullName: r.newFullName } });
+                nameBackfilled += 1;
+            } catch (err) {
+                nameFailed += 1;
+                console.error(`  ! fullName backfill failed for ${r.studentId} (${r.id}): ${err.message}`);
+            }
+        }
+
         console.log('\nResult:');
         console.log(`  Deleted: ${deletedCount}`);
         console.log(`  Emails updated: ${emailUpdated}`);
         if (emailFailed > 0) console.log(`  Email update failures: ${emailFailed}`);
+        console.log(`  fullName backfilled: ${nameBackfilled}`);
+        if (nameFailed > 0) console.log(`  fullName backfill failures: ${nameFailed}`);
         console.log('Done.');
     } catch (err) {
         console.error('Cleanup failed:', err.message);
