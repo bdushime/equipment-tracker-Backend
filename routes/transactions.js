@@ -676,7 +676,9 @@ router.get('/security/dashboard-stats', verifyToken, async (req, res) => {
 router.get('/security/access-logs', verifyToken, async (req, res) => {
     try {
         const page = parseInt(req.query.page, 10) || 1;
-        const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+        // Raised cap from 200 → 2000 so the full Access Logs page can paginate
+        // through real data instead of being stuck on a single page of 10.
+        const limit = Math.min(parseInt(req.query.limit, 10) || 50, 2000);
         const skip = (page - 1) * limit;
 
         const [logs, total] = await Promise.all([

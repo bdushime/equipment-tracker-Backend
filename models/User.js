@@ -44,6 +44,21 @@ const UserSchema = new mongoose.Schema({
         enum: ['Active', 'Suspended'],
         default: 'Active'
     },
+    // --- Lockout (separate from Suspension) ---
+    // Suspension is a long-term admin punishment; lockout is automatic after
+    // too many failed password attempts and only an admin can clear it.
+    loginAttempts: {
+        type: Number,
+        default: 0
+    },
+    isLocked: {
+        type: Boolean,
+        default: false
+    },
+    lockedAt: {
+        type: Date,
+        default: null
+    },
     lastLogin: {
         type: Date,
         default: Date.now // 👇 NEW: Added default

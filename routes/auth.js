@@ -1,7 +1,12 @@
 const router = require('express').Router();
 const User = require('../models/User');
+const Config = require('../models/Config');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+
+// Number of wrong-password attempts a user gets before the account auto-locks.
+// Tweak in one place if policy changes.
+const MAX_LOGIN_ATTEMPTS = 3;
 
 // ==========================================
 // @route   POST /api/auth/register
@@ -82,18 +87,68 @@ router.post('/login', async (req, res) => {
             $or: [{ email: identifier }, { studentId: identifier }]
         });
         if (!user) {
-            return res.status(404).json({ message: "User doesn't exist" });
+            // Use the same "Invalid credentials" wording the wrong-password path
+            // uses, so the response doesn't tell a probing attacker whether the
+            // account exists. (We still allow 404 here — change later if needed.)
+            return res.status(404).json({ message: "Invalid credentials" });
         }
 
-        // --- NEW: Check if user is suspended
+        // Suspended (admin punishment) — long-term, distinct from auto-lockout.
         if (user.status === 'Suspended') {
             return res.status(403).json({ message: "Your account is suspended. Please contact the administrator." });
+        }
+
+        // Auto-locked from too many failed attempts. Only an admin can clear
+        // user.isLocked back to false (via PUT /users/:id).
+        if (user.isLocked) {
+            return res.status(423).json({
+                message: "Your account is locked due to too many failed login attempts. Please contact the administrator to unlock it.",
+                code: "ACCOUNT_LOCKED",
+            });
+        }
+
+        // Maintenance mode: students cannot log in. Admin / IT / Security still
+        // can so they can finish whatever change triggered the mode.
+        if (user.role === 'Student') {
+            const config = await Config.findOne().select('maintenanceMode');
+            if (config?.maintenanceMode) {
+                return res.status(503).json({
+                    message: "The system is under maintenance. Please try again later.",
+                    code: "MAINTENANCE_MODE",
+                });
+            }
         }
 
         // 2. VERIFY PASSWORD
         const isMatch = await bcrypt.compare(inputPassword, user.password);
         if (!isMatch) {
-            return res.status(400).json({ message: "Password is wrong" });
+            // Increment the attempt counter; lock once we hit the threshold.
+            user.loginAttempts = (user.loginAttempts || 0) + 1;
+            let lockedNow = false;
+            if (user.loginAttempts >= MAX_LOGIN_ATTEMPTS) {
+                user.isLocked = true;
+                user.lockedAt = new Date();
+                lockedNow = true;
+            }
+            await user.save();
+
+            if (lockedNow) {
+                return res.status(423).json({
+                    message: "Too many failed attempts. Your account has been locked. Please contact the administrator to unlock it.",
+                    code: "ACCOUNT_LOCKED",
+                });
+            }
+
+            const remaining = Math.max(0, MAX_LOGIN_ATTEMPTS - user.loginAttempts);
+            return res.status(401).json({
+                message: "Invalid credentials",
+                remainingAttempts: remaining,
+            });
+        }
+
+        // Successful password → reset the failed-attempt counter.
+        if (user.loginAttempts > 0) {
+            user.loginAttempts = 0;
         }
 
         // 3. Update Last Login
