@@ -252,7 +252,10 @@ router.put('/:id/request-return', verifyToken, async (req, res) => {
         // Update the status and photos
         transaction.returnPhotoUrl = returnPhotoUrl;
         transaction.status = 'Pending Return';
+
+        console.log(`[REQUEST-RETURN] Saving transaction ${transaction._id}, status=${transaction.status}, startTime=${transaction.startTime}, expectedReturnTime=${transaction.expectedReturnTime}, destination=${transaction.destination}, purpose=${transaction.purpose}`);
         await transaction.save();
+        console.log(`[REQUEST-RETURN] transaction.save() OK`);
 
         // Send Notification to IT Staff (strict allowlist — same as checkout route)
         User.find({ role: { $in: ['IT', 'IT_Staff', 'IT Staff', 'IT_STAFF', 'Admin'] } }).then(staffMembers => {
@@ -269,11 +272,13 @@ router.put('/:id/request-return', verifyToken, async (req, res) => {
         }).catch(console.error);
 
         // Log the action
+        console.log(`[REQUEST-RETURN] Creating AuditLog for user=${req.user.id}, equipment=${transaction.equipment?.name}`);
         await AuditLog.create({
             action: "RETURN_REQUESTED",
             user: req.user.id,
             details: `Requested to return ${transaction.equipment.name}`
         });
+        console.log(`[REQUEST-RETURN] AuditLog.create() OK`);
 
         res.status(200).json({ message: "Return requested successfully. Awaiting IT Staff approval.", transaction });
 
