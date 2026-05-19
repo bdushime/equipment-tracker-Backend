@@ -10,14 +10,24 @@ router.get('/', verifyToken, checkRole(['Admin']), async (req, res) => {
         // 1. AUDIT LOGS (Latest Transactions)
         // We treat every transaction as a "log" for now. In a real app, you'd have a separate AuditLog model.
         const logs = await Transaction.find()
-            .populate('user', 'username email role')
+            .populate('user', 'username fullName studentId email role')
             .populate('equipment', 'name serialNumber')
             .sort({ createdAt: -1 })
             .limit(20);
 
+        // Mirrors the frontend displayName() rule so the table never leaks the
+        // raw "studentNNNNN" username — placeholder is "Student {studentId}".
+        const resolveName = (u) => {
+            if (!u) return 'Unknown';
+            const full = (u.fullName || '').trim();
+            if (full) return full;
+            if (u.studentId) return `Student ${u.studentId}`;
+            return u.username || 'Unknown';
+        };
+
         const auditLogs = logs.map(log => ({
             id: log._id,
-            user: log.user?.username || "Unknown",
+            user: resolveName(log.user),
             action: (log.status === 'Overdue' || (log.returnTime === null && new Date(log.expectedReturnTime) < new Date())) ? 'Overdue Alert' :
                 log.status === 'Checked Out' ? 'Equipment Checkout' :
                     log.status === 'Borrowed' ? 'Equipment Checkout' :
@@ -40,7 +50,7 @@ router.get('/', verifyToken, checkRole(['Admin']), async (req, res) => {
         const activeUsers = await User.find({ lastLogin: { $gte: oneDayAgo } }).limit(10);
 
         const activeSessions = activeUsers.map(user => ({
-            user: user.username,
+            user: resolveName(user),
             role: user.role,
             location: user.lastLocation || "Kigali, RW",
             device: user.lastDevice || "Web Browser",

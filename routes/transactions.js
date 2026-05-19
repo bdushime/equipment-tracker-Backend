@@ -576,7 +576,7 @@ router.get('/all-history', verifyToken, checkRole(['IT', 'IT_Staff', 'IT_STAFF',
 
         const [transactions, total] = await Promise.all([
             Transaction.find()
-                .populate('user', 'username email responsibilityScore')
+                .populate('user', 'username fullName studentId email responsibilityScore')
                 .populate('equipment', 'name serialNumber category status')
                 .sort({ createdAt: -1 })
                 .skip(skip)
@@ -681,7 +681,7 @@ router.get('/security/access-logs', verifyToken, async (req, res) => {
 
         const [logs, total] = await Promise.all([
             Transaction.find()
-                .populate('user', 'username email role')
+                .populate('user', 'username fullName studentId email role')
                 .populate('equipment', 'name serialNumber category')
                 .sort({ createdAt: -1 })
                 .skip(skip)
@@ -742,7 +742,7 @@ router.get('/admin/dashboard-stats', verifyToken, checkRole(['Admin']), async (r
         const systemStatus = "Online";
 
         const recentActivity = await Transaction.find()
-            .populate('user', 'username email')
+            .populate('user', 'username fullName studentId email')
             .populate('equipment', 'name')
             .sort({ createdAt: -1 })
             .limit(5);
