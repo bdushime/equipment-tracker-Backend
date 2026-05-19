@@ -26,7 +26,7 @@ router.get('/active', verifyToken, async (req, res) => {
         const transactions = await Transaction.find({
             status: { $in: ['Pending', 'Checked Out', 'Overdue', 'Borrowed', 'Reserved', 'Pending Return'] }
         })
-            .select('-checkoutPhotoUrl')
+            .select('-checkoutPhotoUrl -returnPhotoUrl')
             .populate('equipment', 'name serialNumber type category')
             .populate('user', 'username email fullName phone studentId department responsibilityScore')
             .sort({ createdAt: -1 });
@@ -181,8 +181,8 @@ router.post('/checkout', verifyToken, async (req, res) => {
             // 2. DEBUG & NOTIFY IT STAFF
             console.log("[DEBUG] Searching for IT Staff to notify...");
 
-            // Query strictly for these roles
-            const staffMembers = await User.find({ role: { $in: ['IT', 'IT_Staff', 'Admin'] } });
+            // Query strictly for these roles (including IT Staff space and casing variations)
+            const staffMembers = await User.find({ role: { $in: ['IT', 'IT_Staff', 'IT Staff', 'IT_STAFF', 'Admin', 'Security'] } });
 
             console.log(`[DEBUG] Found ${staffMembers.length} staff members in DB.`);
 
@@ -243,7 +243,14 @@ router.put('/:id/request-return', verifyToken, async (req, res) => {
             return res.status(403).json({ message: "Unauthorized. You did not borrow this item." });
         }
 
-        // Update the status
+        // Extract return condition photos if provided
+        const conditionPhotos = req.body.conditionPhotos && typeof req.body.conditionPhotos === 'object'
+            ? req.body.conditionPhotos
+            : {};
+        const returnPhotoUrl = [conditionPhotos.front, conditionPhotos.back].filter(Boolean);
+
+        // Update the status and photos
+        transaction.returnPhotoUrl = returnPhotoUrl;
         transaction.status = 'Pending Return';
         await transaction.save();
 
@@ -522,7 +529,7 @@ router.post('/cancel/:id', verifyToken, async (req, res) => {
         if (!transaction) return res.status(404).json({ message: "Transaction not found." });
 
         const isOwner = transaction.user._id.toString() === req.user.id;
-        const isStaff = ['IT', 'IT_Staff', 'Admin'].includes(req.user.role);
+        const isStaff = ['IT', 'IT_Staff', 'IT Staff', 'IT_STAFF', 'Admin', 'Security'].includes(req.user.role);
 
         if (!isOwner && !isStaff) {
             return res.status(403).json({ message: "Unauthorized." });
@@ -816,7 +823,7 @@ router.get('/:id', verifyToken, async (req, res) => {
         }
 
         // Students can only see their own; staff can see anything.
-        const isStaff = ['IT', 'IT_Staff', 'Admin', 'Security'].includes(req.user.role);
+        const isStaff = ['IT', 'IT_Staff', 'IT Staff', 'IT_STAFF', 'Admin', 'Security'].includes(req.user.role);
         if (!isStaff && transaction.user?._id?.toString() !== req.user.id) {
             return res.status(403).json({ message: 'Forbidden' });
         }
