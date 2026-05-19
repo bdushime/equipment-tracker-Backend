@@ -12,7 +12,7 @@ const { verifyToken } = require('../middleware/verifyToken');
 const { checkRole } = require('../middleware/checkRole');
 const { requirePasswordResetComplete } = require('../middleware/requirePasswordResetComplete');
 
-const MAX_LOAN_HOURS = 24;
+// MAX_LOAN_HOURS is now read dynamically from Config (see checkout route below)
 
 router.use(verifyToken, requirePasswordResetComplete);
 
@@ -93,13 +93,16 @@ router.post('/checkout', verifyToken, async (req, res) => {
             });
         }
 
-        // Policy Check: Duration
+        // Policy Check: Duration (read limit dynamically from Admin Config)
         const returnDate = new Date(expectedReturnTime);
         const now = new Date();
         const hoursDifference = Math.abs(returnDate - now) / 36e5;
 
-        if (hoursDifference > MAX_LOAN_HOURS) {
-            return res.status(400).json({ message: `Security Policy: You cannot borrow items for more than ${MAX_LOAN_HOURS} hours.` });
+        const sysConfig = await Config.findOne();
+        const maxLoanHours = sysConfig?.studentMaxHours || 5; // fallback: 5 hrs
+
+        if (hoursDifference > maxLoanHours) {
+            return res.status(400).json({ message: `Security Policy: You cannot borrow items for more than ${maxLoanHours} hour${maxLoanHours !== 1 ? 's' : ''}.` });
         }
 
         // Availability Check
@@ -576,7 +579,7 @@ router.get('/all-history', verifyToken, checkRole(['IT', 'IT_Staff', 'IT_STAFF',
 
         const [transactions, total] = await Promise.all([
             Transaction.find()
-                .populate('user', 'username fullName studentId email responsibilityScore')
+                .populate('user', 'username email responsibilityScore')
                 .populate('equipment', 'name serialNumber category status')
                 .sort({ createdAt: -1 })
                 .skip(skip)
@@ -676,14 +679,12 @@ router.get('/security/dashboard-stats', verifyToken, async (req, res) => {
 router.get('/security/access-logs', verifyToken, async (req, res) => {
     try {
         const page = parseInt(req.query.page, 10) || 1;
-        // Raised cap from 200 → 2000 so the full Access Logs page can paginate
-        // through real data instead of being stuck on a single page of 10.
-        const limit = Math.min(parseInt(req.query.limit, 10) || 50, 2000);
+        const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
         const skip = (page - 1) * limit;
 
         const [logs, total] = await Promise.all([
             Transaction.find()
-                .populate('user', 'username fullName studentId email role')
+                .populate('user', 'username email role')
                 .populate('equipment', 'name serialNumber category')
                 .sort({ createdAt: -1 })
                 .skip(skip)
@@ -744,7 +745,7 @@ router.get('/admin/dashboard-stats', verifyToken, checkRole(['Admin']), async (r
         const systemStatus = "Online";
 
         const recentActivity = await Transaction.find()
-            .populate('user', 'username fullName studentId email')
+            .populate('user', 'username email')
             .populate('equipment', 'name')
             .sort({ createdAt: -1 })
             .limit(5);

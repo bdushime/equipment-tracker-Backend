@@ -14,7 +14,8 @@ router.get('/options', verifyToken, async (req, res) => {
         res.status(200).json({
             categories: config.equipmentCategories,
             conditions: config.equipmentConditions,
-            statuses: config.equipmentStatuses
+            statuses: config.equipmentStatuses,
+            studentMaxHours: config.studentMaxHours ?? 5, // exposed so students see the dynamic limit
         });
     } catch (err) {
         res.status(500).json(err);
