@@ -16,7 +16,6 @@ const transactionSchema = new mongoose.Schema({
     // For reservations, this is a future date.
     startTime: {
         type: Date,
-        required: true,
         default: Date.now
     },
     // We keep checkoutTime for record-keeping of when they actually picked it up
