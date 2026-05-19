@@ -244,7 +244,8 @@ router.put('/:id/request-return', verifyToken, async (req, res) => {
         }
 
         // Extract return condition photos if provided
-        const conditionPhotos = req.body.conditionPhotos && typeof req.body.conditionPhotos === 'object'
+        // Guard against req.body being undefined (Render sends no body on simple PUT requests)
+        const conditionPhotos = (req.body && req.body.conditionPhotos && typeof req.body.conditionPhotos === 'object')
             ? req.body.conditionPhotos
             : {};
         const returnPhotoUrl = [conditionPhotos.front, conditionPhotos.back].filter(Boolean);
