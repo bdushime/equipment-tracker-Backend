@@ -254,8 +254,8 @@ router.put('/:id/request-return', verifyToken, async (req, res) => {
         transaction.status = 'Pending Return';
         await transaction.save();
 
-        // Send Notification to IT Staff
-        User.find({ role: { $regex: /IT|Admin|Staff/i } }).then(staffMembers => {
+        // Send Notification to IT Staff (strict allowlist — same as checkout route)
+        User.find({ role: { $in: ['IT', 'IT_Staff', 'IT Staff', 'IT_STAFF', 'Admin'] } }).then(staffMembers => {
             staffMembers.forEach(staff => {
                 sendNotification(
                     staff._id,
